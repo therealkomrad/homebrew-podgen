@@ -257,7 +257,7 @@ module PodgenCLI
       logger.log("Warning: episode duration #{actual} is #{reason} (allowed range #{range})")
 
       if @options[:ask_trim]
-        prompt = "Episode is #{reason} (#{actual}, allowed #{range}). [t]rim manually / [e]xclude / [a]bort? "
+        prompt = "Episode is #{reason} (#{actual}, allowed #{range}). [t]rim manually / e[x]clude / [a]bort? "
         $stdout.print(prompt)
         $stdout.flush
         choice = ($stdin.gets || "").strip.downcase
@@ -265,7 +265,7 @@ module PodgenCLI
         when "t", "trim"
           logger.log("Continuing with manual trim despite out-of-range duration")
           return nil
-        when "e", "exclude"
+        when "x", "exclude"
           @episode_source.exclude_url!(@episode[:audio_url])
           logger.log("Excluded #{@episode[:audio_url]}")
           return 1

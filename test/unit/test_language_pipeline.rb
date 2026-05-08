@@ -284,7 +284,9 @@ class TestLanguagePipeline < Minitest::Test
     end
   end
 
-  def test_enforce_length_with_ask_trim_excludes_on_e
+  def test_enforce_length_with_ask_trim_excludes_on_x
+    # `x` is the project-wide exclude key (matches other prompts in this file
+    # at lines ~321,326 — "x to exclude" — and scrap_command).
     pipeline = build_pipeline(options: { ask_trim: true })
     pipeline.instance_variable_set(:@source_audio_path, "/tmp/x.mp3")
     pipeline.instance_variable_set(:@config, build_config_with_length(min: 120, max: 570))
@@ -296,15 +298,18 @@ class TestLanguagePipeline < Minitest::Test
     fake_source.define_singleton_method(:exclude_url!) { |url| excluded_url = url }
     pipeline.instance_variable_set(:@episode_source, fake_source)
 
-    $stdin.stub :gets, "e\n" do
+    out = nil
+    $stdin.stub :gets, "x\n" do
       AudioAssembler.stub :probe_duration, 700.0 do
-        capture_io do
+        out, _ = capture_io do
           result = pipeline.send(:enforce_length_post_download)
           assert_equal 1, result
         end
       end
     end
     assert_equal "https://ex.com/ep.mp3", excluded_url
+    assert_match(/\[x\](?:clude|.*exclude)/i, out,
+      "prompt must offer [x] for exclude (project-wide convention)")
   end
 
   def test_enforce_length_with_ask_trim_continues_on_t

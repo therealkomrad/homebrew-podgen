@@ -471,9 +471,12 @@ class TestPublishCommand < Minitest::Test
     assert_equal "2026-03-10", cmd.instance_variable_get(:@episode_id)
   end
 
-  def test_date_flag_overrides_positional
-    cmd = PodgenCLI::PublishCommand.new(["testpod", "2026-01-01", "--date", "2026-03-10"], {})
-    assert_equal "2026-03-10", cmd.instance_variable_get(:@episode_id)
+  def test_date_flag_with_positional_date_is_rejected
+    # Passing both is ambiguous — fail loud rather than silently dropping one.
+    err = assert_raises(OptionParser::ParseError) do
+      PodgenCLI::PublishCommand.new(["testpod", "2026-01-01", "--date", "2026-03-10"], {})
+    end
+    assert_includes err.message, "2026-01-01"
   end
 
   # --- find_text_file ---

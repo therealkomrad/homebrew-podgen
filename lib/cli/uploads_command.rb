@@ -39,6 +39,9 @@ module PodgenCLI
       end.parse!(args)
 
       @pods_arg = args.shift
+      unless args.empty?
+        raise OptionParser::ParseError, "unexpected argument(s): #{args.join(' ')}"
+      end
     end
 
     def run

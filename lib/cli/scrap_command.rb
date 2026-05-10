@@ -38,6 +38,7 @@ module PodgenCLI
         @podcast_name = args.shift
         @episode_id ||= args.shift # optional: e.g. "2026-03-31b"
       end
+      reject_leftover_args!(args)
       @options = options
       @dry_run = options[:dry_run] || false
     end

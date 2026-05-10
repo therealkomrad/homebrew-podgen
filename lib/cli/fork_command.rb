@@ -14,6 +14,7 @@ module PodgenCLI
       @options = options
       @podcast_name = args.shift
       @new_name = args.shift
+      reject_leftover_args!(args)
     end
 
     def run

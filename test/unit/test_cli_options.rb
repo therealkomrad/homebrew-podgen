@@ -76,6 +76,37 @@ class TestCLIOptions < Minitest::Test
     assert_includes err, "invalid option: --bogus"
   end
 
+  # ── Malformed long options / unexpected positional args ─────────
+  # OptionParser does unique-prefix matching from short-option syntax to
+  # long options: `-rss babi` becomes `--rss=ss` with `babi` left over as
+  # a positional. Without a leftover-args check, that residue is silently
+  # dropped. These tests pin the loud-fail behavior.
+
+  def test_generate_rejects_single_dash_long_option
+    code, _, err = run_cli("generate", "test_pod", "-rss", "babi")
+    assert_equal 2, code
+    assert_includes err, "babi"
+  end
+
+  def test_generate_rejects_unexpected_positional_arg
+    code, _, err = run_cli("generate", "test_pod", "extra_arg")
+    assert_equal 2, code
+    assert_includes err, "extra_arg"
+  end
+
+  def test_publish_rejects_third_positional_arg
+    # publish accepts <podcast> [episode_id] — a 3rd positional is leftover.
+    code, _, err = run_cli("publish", "test_pod", "2026-01-15", "extra_arg")
+    assert_equal 2, code
+    assert_includes err, "extra_arg"
+  end
+
+  def test_rss_rejects_unexpected_positional_arg
+    code, _, err = run_cli("rss", "test_pod", "extra_arg")
+    assert_equal 2, code
+    assert_includes err, "extra_arg"
+  end
+
   # ── Typos near valid options should fail ─────────────────────────
 
   def test_publish_lingq_typo

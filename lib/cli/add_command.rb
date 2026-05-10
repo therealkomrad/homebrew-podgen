@@ -21,6 +21,7 @@ module PodgenCLI
 
       @podcast_name = args.shift
       @url = args.shift
+      reject_leftover_args!(args)
     end
 
     def run

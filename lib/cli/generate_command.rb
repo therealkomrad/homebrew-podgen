@@ -60,6 +60,7 @@ module PodgenCLI
       @dry_run = @options[:dry_run] || false
 
       @podcast_name = args.shift
+      reject_leftover_args!(args)
     end
 
     def run

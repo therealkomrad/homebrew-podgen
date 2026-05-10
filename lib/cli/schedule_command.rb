@@ -51,6 +51,7 @@ module PodgenCLI
       end.parse!(args)
 
       @podcast_name = args.shift
+      reject_leftover_args!(args)
     end
 
     def publish? = @publish

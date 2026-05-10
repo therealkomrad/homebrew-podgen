@@ -14,6 +14,9 @@ module PodgenCLI
     def initialize(args, options)
       @options = options
       @subcommand = args.shift
+      unless args.empty?
+        raise OptionParser::ParseError, "unexpected argument(s): #{args.join(' ')}"
+      end
     end
 
     def run

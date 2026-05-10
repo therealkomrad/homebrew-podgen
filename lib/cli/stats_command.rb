@@ -34,6 +34,9 @@ module PodgenCLI
         opts.on("--sort COL", %w[body vocab], "Sort --words by 'body' (default) or 'vocab' frequency") { |s| @sort = s }
       end.parse!(args)
       @podcast_name = args.shift
+      unless args.empty?
+        raise OptionParser::ParseError, "unexpected argument(s): #{args.join(' ')}"
+      end
     end
 
     def run

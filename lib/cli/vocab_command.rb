@@ -22,6 +22,7 @@ module PodgenCLI
       @subcommand = args.shift
       @podcast_name = args.shift
       @word = args.shift
+      reject_leftover_args!(args)
     end
 
     def run

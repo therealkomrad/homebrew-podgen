@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "optparse"
+
 root = File.expand_path("../..", __dir__)
 require_relative File.join(root, "lib", "podcast_config")
 
@@ -64,6 +66,14 @@ module PodgenCLI
       @config = PodcastConfig.new(@podcast_name)
       @config.load_env!
       @config
+    end
+
+    # Raises if any positional args remain after expected positionals were
+    # extracted. Catches typos like `-rss URL` (parsed as `--rss=ss` plus a
+    # leftover `URL`) and stray words like `generate <pod> extra_arg`.
+    def reject_leftover_args!(args)
+      return if args.empty?
+      raise OptionParser::ParseError, "unexpected argument(s): #{args.join(' ')}"
     end
   end
 end

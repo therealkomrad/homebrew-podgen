@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "optparse"
 require "yaml"
 
 root = File.expand_path("../..", __dir__)
@@ -19,8 +20,10 @@ module PodgenCLI
       elsif args.length == 1
         @source_name = nil
         @new_name = args[0]
-      else
+      elsif args.empty?
         @new_name = nil
+      else
+        raise OptionParser::ParseError, "unexpected argument(s): #{args[2..].join(' ')}"
       end
     end
 

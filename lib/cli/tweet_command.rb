@@ -20,6 +20,7 @@ module PodgenCLI
 
       @podcast_name = args.shift
       @episode_id = args.shift
+      reject_leftover_args!(args)
     end
 
     def run

@@ -18,6 +18,7 @@ module PodgenCLI
         opts.on("--youtube", "Delete YouTube videos instead of R2") { @options[:youtube] = true }
       end.parse!(args)
       @podcast_name = args.shift
+      reject_leftover_args!(args)
     end
 
     def run

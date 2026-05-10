@@ -27,6 +27,7 @@ module PodgenCLI
 
       @podcast_name = args.shift
       @episode_id ||= args.shift
+      reject_leftover_args!(args)
       @options = options
       @dry_run = options[:dry_run] || false
     end

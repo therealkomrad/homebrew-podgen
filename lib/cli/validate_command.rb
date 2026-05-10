@@ -16,6 +16,9 @@ module PodgenCLI
         opts.on("--all", "Validate all podcasts") { @all = true }
       end.parse!(args)
       @podcast_name = args.shift
+      unless args.empty?
+        raise OptionParser::ParseError, "unexpected argument(s): #{args.join(' ')}"
+      end
     end
 
     def run

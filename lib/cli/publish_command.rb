@@ -37,6 +37,7 @@ module PodgenCLI
       end.parse!(args)
       @podcast_name = args.shift
       @episode_id ||= args.shift # optional: e.g. "2026-03-31" or "2026-03-31b"
+      reject_leftover_args!(args)
     end
 
     def run

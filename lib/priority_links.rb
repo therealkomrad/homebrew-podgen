@@ -5,6 +5,7 @@ require "net/http"
 require "uri"
 require_relative "atomic_writer"
 require_relative "yaml_loader"
+require_relative "logger"
 
 # Manages priority links for news podcasts.
 # Links are stored in podcasts/<name>/links.yml and consumed on successful generation.
@@ -66,16 +67,17 @@ class PriorityLinks
     entries = all
     return [] if entries.empty?
 
+    target = logger || PodcastAgent.logger
     entries.map do |entry|
       url = entry["url"]
       note = entry["note"]
-      logger&.log("  Fetching: #{url}")
+      target.log("  Fetching: #{url}")
 
       title, summary = fetch_page_info(url)
       title ||= url
       summary = [note, summary].compact.reject(&:empty?).join(" — ") if note
 
-      logger&.log("  \u2713 #{title}")
+      target.log("  \u2713 #{title}")
       { title: title, url: url, summary: summary || "Priority link added by producer" }
     end
   end

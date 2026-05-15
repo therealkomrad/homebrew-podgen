@@ -55,6 +55,7 @@ module PodgenCLI
 
       config = load_config!
       logger = PodcastAgent::Logger.new(log_path: config.log_path(@date || Date.today), verbosity: @options[:verbosity])
+      PodcastAgent.logger = logger
 
       basenames = resolve_basenames(config)
       if basenames.empty?

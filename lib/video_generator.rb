@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
 require "open3"
+require_relative "loggable"
 
 # Creates an MP4 video from a static cover image and audio file.
 # Output is YouTube-optimized: 1920x1080 HD, H.264 + AAC, faststart.
 class VideoGenerator
+  include Loggable
+
   def initialize(logger: nil)
     @logger = logger
   end
@@ -40,10 +43,6 @@ class VideoGenerator
       "-movflags", "+faststart",
       output_path
     ]
-  end
-
-  def log(msg)
-    @logger&.log("[VideoGenerator] #{msg}")
   end
 
   def format_size(bytes)

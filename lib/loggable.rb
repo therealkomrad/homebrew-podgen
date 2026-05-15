@@ -1,8 +1,12 @@
 # frozen_string_literal: true
 
-# Mixin that provides a `log` method using the injected @logger.
-# Derives a tag from the class name (e.g. "[TTSAgent]", "[Transcription::GroqEngine]").
-# Falls back to puts when no logger is set.
+require_relative "logger"
+
+# Mixin that provides logging helpers using the injected @logger, falling
+# back to the ambient PodcastAgent.logger (a NullLogger by default).
+#
+# `log` adds a tag derived from the class name (e.g. "[TTSAgent]"). The
+# phase_start / phase_end / log_error helpers pass through unchanged.
 #
 # Usage:
 #   class MyAgent
@@ -16,11 +20,20 @@ module Loggable
 
   def log(message)
     tag = "[#{self.class.name&.split('::')&.last || self.class.name}]"
-    if @logger
-      @logger.log("#{tag} #{message}")
-    else
-      puts "#{tag} #{message}"
-    end
+    logger_target.log("#{tag} #{message}")
+  end
+
+  def log_error(message)
+    tag = "[#{self.class.name&.split('::')&.last || self.class.name}]"
+    logger_target.error("#{tag} #{message}")
+  end
+
+  def phase_start(name)
+    logger_target.phase_start(name)
+  end
+
+  def phase_end(name)
+    logger_target.phase_end(name)
   end
 
   # Times a block and returns [result, elapsed_seconds].
@@ -30,5 +43,9 @@ module Loggable
     result = yield
     elapsed = (Time.now - start).round(2)
     [result, elapsed]
+  end
+
+  def logger_target
+    @logger || PodcastAgent.logger
   end
 end

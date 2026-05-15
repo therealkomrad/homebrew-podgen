@@ -190,17 +190,70 @@ class TestUtilities < Minitest::Test
     require "loggable"
 
     obj = Class.new { include Loggable }.new
-    out, = capture_io { obj.send(:log, "anon test") }
-    assert_includes out, "anon test"
+    # With no @logger and ambient defaulted to NullLogger, this is silent
+    # but must not raise.
+    capture_io { obj.send(:log, "anon test") }
   end
 
-  def test_loggable_without_logger_falls_back_to_puts
+  def test_loggable_without_logger_falls_back_to_ambient
     require "loggable"
 
-    obj = Class.new { include Loggable }.new
-    out, = capture_io { obj.send(:log, "fallback") }
+    received = nil
+    ambient = Object.new
+    ambient.define_singleton_method(:log) { |msg| received = msg }
 
-    assert_includes out, "fallback"
+    obj = Class.new { include Loggable }.new
+    PodcastAgent.with_logger(ambient) do
+      obj.send(:log, "fallback")
+    end
+
+    assert_includes received, "fallback"
+  end
+
+  def test_loggable_default_ambient_is_silent
+    require "loggable"
+
+    prev = PodcastAgent.logger
+    PodcastAgent.logger = nil # reset to default NullLogger
+    obj = Class.new { include Loggable }.new
+    out, err = capture_io { obj.send(:log, "should be silent") }
+    assert_empty out
+    assert_empty err
+  ensure
+    PodcastAgent.logger = prev
+  end
+
+  def test_loggable_phase_start_and_end_delegate_to_logger
+    require "loggable"
+
+    starts = []
+    ends = []
+    logger = Object.new
+    logger.define_singleton_method(:phase_start) { |n| starts << n }
+    logger.define_singleton_method(:phase_end) { |n| ends << n }
+
+    obj = Class.new { include Loggable }.new
+    obj.instance_variable_set(:@logger, logger)
+    obj.send(:phase_start, "Work")
+    obj.send(:phase_end, "Work")
+
+    assert_equal ["Work"], starts
+    assert_equal ["Work"], ends
+  end
+
+  def test_loggable_log_error_delegates_to_logger_error
+    require "loggable"
+
+    errors = []
+    logger = Object.new
+    logger.define_singleton_method(:error) { |m| errors << m }
+
+    obj = Class.new { include Loggable }.new
+    obj.instance_variable_set(:@logger, logger)
+    obj.send(:log_error, "boom")
+
+    assert_equal 1, errors.size
+    assert_includes errors.first, "boom"
   end
 
   # --- Loggable#measure_time ---

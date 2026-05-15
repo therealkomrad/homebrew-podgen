@@ -8,6 +8,7 @@ require_relative "transcript_parser"
 require_relative "transcript_renderer"
 require_relative "atomic_writer"
 require_relative "tell/hunspell"
+require_relative "loggable"
 
 # Aggregates vocabulary-frequency stats across all transcripts of a podcast.
 #
@@ -26,6 +27,7 @@ require_relative "tell/hunspell"
 # regenerated only when the lemma set or hunspell-availability changes.
 class WordStats
   include TranscriptRenderer
+  include Loggable
 
   CACHE_FILENAME = "word_forms.yml"
 
@@ -367,10 +369,6 @@ class WordStats
       regex = /(?<![\p{L}\p{Nd}])#{escaped}(?![\p{L}\p{Nd}])/u
       text.scan(regex).length
     end
-  end
-
-  def log(msg)
-    @logger&.log("[WordStats] #{msg}")
   end
 
   def progress(msg)

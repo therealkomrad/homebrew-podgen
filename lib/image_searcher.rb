@@ -5,6 +5,7 @@ require "uri"
 require "json"
 require "tmpdir"
 require "fileutils"
+require_relative "loggable"
 
 # Searches DuckDuckGo Images for a query, downloads candidates, filters by
 # minimum byte size, and returns metadata for survivors.
@@ -13,6 +14,8 @@ require "fileutils"
 # notice. Treat this as best-effort. Caller is responsible for cleaning up
 # returned tmp file paths.
 class ImageSearcher
+  include Loggable
+
   USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 " \
                "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
   ALLOWED_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".gif"].freeze
@@ -89,7 +92,4 @@ class ImageSearcher
     ".jpg"
   end
 
-  def log(msg)
-    @logger&.log("[ImageSearcher] #{msg}")
-  end
 end

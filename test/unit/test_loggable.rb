@@ -75,10 +75,25 @@ class TestLoggable < Minitest::Test
     assert_includes messages.first, "[InnerAgent]"
   end
 
-  def test_log_without_logger_falls_back_to_puts
-    agent = DummyAgent.new
-    output = capture_io { agent.log("stdout test") }.first
+  def test_log_without_logger_falls_back_to_ambient
+    received = nil
+    ambient = Object.new
+    ambient.define_singleton_method(:log) { |msg| received = msg }
 
-    assert_includes output, "[DummyAgent] stdout test"
+    agent = DummyAgent.new
+    PodcastAgent.with_logger(ambient) { agent.log("ambient test") }
+
+    assert_equal "[DummyAgent] ambient test", received
+  end
+
+  def test_log_with_default_ambient_is_silent
+    prev = PodcastAgent.logger
+    PodcastAgent.logger = nil # reset to default NullLogger
+    agent = DummyAgent.new
+    out, err = capture_io { agent.log("should be silent") }
+    assert_empty out
+    assert_empty err
+  ensure
+    PodcastAgent.logger = prev
   end
 end

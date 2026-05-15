@@ -29,7 +29,7 @@ class Voicer
             lang_code: nil)
     label = lang_code ? " (#{lang_code})" : ""
 
-    log_phase_start("TTS#{label}")
+    phase_start("TTS#{label}")
     tts_agent = TTSAgent.new(
       logger: @logger,
       voice_id_override: voice_id,
@@ -38,22 +38,18 @@ class Voicer
     )
     audio_paths = tts_agent.synthesize(segments)
     log("TTS complete#{label}: #{audio_paths.length} audio files")
-    log_phase_end("TTS#{label}")
+    phase_end("TTS#{label}")
 
-    log_phase_start("Assembly#{label}")
+    phase_start("Assembly#{label}")
     assembler = AudioAssembler.new(logger: @logger)
     assembler.assemble(audio_paths, output_path,
                        intro_path: intro_path, outro_path: outro_path,
                        metadata: { title: title, artist: author },
                        segment_pause: segment_pause)
-    log_phase_end("Assembly#{label}")
+    phase_end("Assembly#{label}")
 
     audio_paths.each { |p| File.delete(p) if File.exist?(p) }
     output_path
   end
 
-  private
-
-  def log_phase_start(name) = @logger&.phase_start(name)
-  def log_phase_end(name) = @logger&.phase_end(name)
 end

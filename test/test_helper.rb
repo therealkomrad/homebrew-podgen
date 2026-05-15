@@ -17,3 +17,15 @@ end
 def skip_unless_command(cmd)
   skip "#{cmd} not found" unless system("which #{cmd} > /dev/null 2>&1")
 end
+
+# Reset the ambient logger between tests so a logger that points at a
+# tmpdir-backed log path can't leak into the next test (which may have
+# already torn down the tmpdir).
+require_relative "../lib/logger"
+module ResetAmbientLogger
+  def before_setup
+    super
+    PodcastAgent.logger = nil
+  end
+end
+Minitest::Test.include(ResetAmbientLogger)

@@ -3,6 +3,7 @@
 require "anthropic"
 require "base64"
 require "json"
+require_relative "loggable"
 
 # Ranks candidate cover images using a single batched Claude vision call.
 # Each candidate gets a combined score (fits_fairytale_cover + matches_episode_description),
@@ -16,6 +17,8 @@ require "json"
 # Sort order: vetoed last; among non-vetoed, has_title_text first, then
 # score DESC.
 class ImageRanker
+  include Loggable
+
   DEFAULT_MODEL = "claude-sonnet-4-6"
   MEDIA_TYPES = {
     ".jpg"  => "image/jpeg",
@@ -143,7 +146,4 @@ class ImageRanker
     nil
   end
 
-  def log(msg)
-    @logger&.log("[ImageRanker] #{msg}")
-  end
 end

@@ -43,6 +43,7 @@ module PodgenCLI
       config = load_config!
 
       logger = PodcastAgent::Logger.new(log_path: config.log_path(Date.today), verbosity: @options[:verbosity])
+      PodcastAgent.logger = logger
       logger.log("Translate started for '#{@podcast_name}'")
 
       # Resolve target languages (exclude English)

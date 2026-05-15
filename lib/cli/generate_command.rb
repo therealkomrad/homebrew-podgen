@@ -143,6 +143,7 @@ module PodgenCLI
         end
       end
       @logger = PodcastAgent::Logger.new(log_path: @config.log_path(@today), verbosity: @options[:verbosity])
+      PodcastAgent.logger = @logger
       @history = EpisodeHistory.new(@config.history_path, excluded_urls_path: @config.excluded_urls_path)
       @warnings = []
 

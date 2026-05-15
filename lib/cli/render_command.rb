@@ -46,6 +46,7 @@ module PodgenCLI
 
       config = load_config!
       logger = PodcastAgent::Logger.new(log_path: config.log_path(@date || Date.today), verbosity: @options[:verbosity])
+      PodcastAgent.logger = logger
 
       md_paths = discover_markdown_paths(config.episodes_dir)
       md_paths = filter_by_date(md_paths, @date) if @date

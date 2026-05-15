@@ -3,6 +3,7 @@
 require "net/http"
 require "uri"
 require_relative "subtitle_parser"
+require_relative "logger"
 
 # Discovers existing transcripts from episode metadata before STT transcription.
 # Checks multiple sources in priority order: podcast:transcript tags, content:encoded,
@@ -166,7 +167,7 @@ module TranscriptDiscovery
     end
 
     def log(msg, logger = nil)
-      logger&.log("[TranscriptDiscovery] #{msg}")
+      (logger || PodcastAgent.logger).log("[TranscriptDiscovery] #{msg}")
     end
   end
 end

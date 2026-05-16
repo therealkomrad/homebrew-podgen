@@ -1,0 +1,130 @@
+# frozen_string_literal: true
+
+require "date"
+require "optparse"
+
+module PodgenCLI
+  # Shared episode-selection parsing for CLI commands that operate on a
+  # specific episode (or window of episodes). Include in the command class
+  # and call inside its OptionParser block:
+  #
+  #   add_episode_selection_options!(opts)
+  #
+  # After parse!, call:
+  #
+  #   extract_positional_date!(args)   # pops a trailing date positional, if any
+  #   reject_leftover_args!(args)
+  #   validate_episode_selection!
+  #
+  # Then read via #episode_date, #episode_suffix, #episode_id, #last_n.
+  module EpisodeSelector
+    # Token shape used to decide whether the trailing positional is a date:
+    # one or more digits/hyphens, optional single trailing lowercase letter.
+    DATE_TOKEN_RE = /\A\d[\d-]*[a-z]?\z/
+
+    # Parses the flexible date forms accepted on the command line.
+    # Returns [Date, suffix_or_nil]. Raises ArgumentError on anything else.
+    module DateParser
+      SUPPORTED_FORMS = "YYYY-MM-DD, YYYYMMDD, MM-DD, MMDD, or DD"
+      SUFFIX_RE = /([a-z])\z/
+
+      module_function
+
+      def parse(raw, today: Date.today)
+        raise ArgumentError, "Empty date" if raw.nil? || raw.empty?
+
+        body, suffix = strip_suffix(raw)
+        ymd = extract_ymd(body, today)
+        raise ArgumentError, "Invalid date '#{raw}' — use #{SUPPORTED_FORMS}" unless ymd
+        y, m, d = ymd
+
+        date =
+          begin
+            Date.new(y, m, d)
+          rescue Date::Error => e
+            raise ArgumentError, "Invalid date '#{raw}': #{e.message}"
+          end
+
+        [date, suffix]
+      end
+
+      def strip_suffix(raw)
+        m = raw.match(SUFFIX_RE)
+        return [raw, nil] unless m
+        body = raw[0..-2]
+        # Suffix is only meaningful if the rest looks like digits/hyphens.
+        return [raw, nil] if body.empty? || body.match?(/[^\d-]/)
+        [body, m[1]]
+      end
+
+      # Returns [year, month, day] or nil if the body doesn't match a supported form.
+      def extract_ymd(body, today)
+        case body
+        when /\A(\d{4})-(\d{2})-(\d{2})\z/ then [$1.to_i, $2.to_i, $3.to_i]
+        when /\A(\d{4})(\d{2})(\d{2})\z/   then [$1.to_i, $2.to_i, $3.to_i]
+        when /\A(\d{2})-(\d{2})\z/         then [today.year, $1.to_i, $2.to_i]
+        when /\A(\d{2})(\d{2})\z/          then [today.year, $1.to_i, $2.to_i]
+        when /\A(\d{1,2})\z/               then [today.year, today.month, $1.to_i]
+        end
+      end
+    end
+
+    def add_episode_selection_options!(opts)
+      opts.on("--date DATE", "Episode date YYYY-MM-DD[a-z] (also accepted as trailing positional; short forms MMDD, MM-DD, DD use current year/month)") do |v|
+        @date_arg = v
+      end
+      opts.on("--last N", Integer, "Operate on N most recent episodes (mutually exclusive with --date)") do |n|
+        @last_n = n
+      end
+    end
+
+    # Pops a trailing positional date if present. Raises if it duplicates --date.
+    def extract_positional_date!(args)
+      return if args.empty?
+      return unless args.last.match?(DATE_TOKEN_RE)
+      pos = args.pop
+      if @date_arg
+        raise OptionParser::ParseError, "Specify date via positional or --date, not both"
+      end
+      @date_arg = pos
+    end
+
+    def validate_episode_selection!
+      if @date_arg && @last_n
+        raise OptionParser::ParseError, "--date and --last are mutually exclusive"
+      end
+      parse_date_arg! if @date_arg
+    end
+
+    def episode_date
+      parse_date_arg! if @date_arg && @parsed_date.nil?
+      @parsed_date
+    end
+
+    def episode_suffix
+      parse_date_arg! if @date_arg && @parsed_date.nil?
+      @parsed_suffix
+    end
+
+    def episode_id
+      @date_arg
+    end
+
+    def last_n
+      @last_n
+    end
+
+    private
+
+    def parse_date_arg!
+      @parsed_date, @parsed_suffix = DateParser.parse(@date_arg, today: episode_selector_today)
+    rescue ArgumentError => e
+      raise OptionParser::ParseError, e.message
+    end
+
+    # Overridable seam for tests.
+    def episode_selector_today
+      respond_to?(:today, true) ? send(:today) : Date.today
+    end
+  end
+end

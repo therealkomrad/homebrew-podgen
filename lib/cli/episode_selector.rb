@@ -110,6 +110,13 @@ module PodgenCLI
       @date_arg
     end
 
+    # The episode identifier in canonical "YYYY-MM-DD[a-z]" form, regardless
+    # of the input shape the user typed. Nil when no date was given.
+    def normalized_episode_id
+      return nil unless episode_date
+      "#{episode_date.strftime('%Y-%m-%d')}#{episode_suffix}"
+    end
+
     def last_n
       @last_n
     end

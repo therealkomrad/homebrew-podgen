@@ -223,7 +223,7 @@ class TestScrapCommand < Minitest::Test
     cmd = PodgenCLI::ScrapCommand.new([path], {})
 
     assert_equal "test", cmd.instance_variable_get(:@podcast_name)
-    assert_equal "2026-03-15", cmd.instance_variable_get(:@episode_id)
+    assert_equal "2026-03-15", cmd.normalized_episode_id
   end
 
   def test_initialize_accepts_file_path_with_suffix
@@ -233,7 +233,30 @@ class TestScrapCommand < Minitest::Test
     cmd = PodgenCLI::ScrapCommand.new([path], {})
 
     assert_equal "test", cmd.instance_variable_get(:@podcast_name)
-    assert_equal "2026-03-15b", cmd.instance_variable_get(:@episode_id)
+    assert_equal "2026-03-15b", cmd.normalized_episode_id
+  end
+
+  def test_initialize_accepts_positional_date
+    cmd = PodgenCLI::ScrapCommand.new(["mypod", "2026-03-15"], {})
+    assert_equal "mypod", cmd.instance_variable_get(:@podcast_name)
+    assert_equal "2026-03-15", cmd.normalized_episode_id
+  end
+
+  def test_initialize_accepts_positional_date_short_form
+    cmd = PodgenCLI::ScrapCommand.new(["mypod", "0315b"], {})
+    today = Date.today
+    assert_equal "#{today.year}-03-15b", cmd.normalized_episode_id
+  end
+
+  def test_initialize_accepts_date_flag
+    cmd = PodgenCLI::ScrapCommand.new(["mypod", "--date", "2026-03-15"], {})
+    assert_equal "2026-03-15", cmd.normalized_episode_id
+  end
+
+  def test_initialize_rejects_date_flag_and_positional_together
+    assert_raises(OptionParser::ParseError) do
+      PodgenCLI::ScrapCommand.new(["mypod", "2026-03-15", "--date", "2026-03-16"], {})
+    end
   end
 
   private

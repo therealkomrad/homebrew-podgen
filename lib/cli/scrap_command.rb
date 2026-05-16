@@ -4,6 +4,7 @@ root = File.expand_path("../..", __dir__)
 
 require "optparse"
 require_relative File.join(root, "lib", "cli", "podcast_command")
+require_relative File.join(root, "lib", "cli", "episode_selector")
 require_relative File.join(root, "lib", "episode_history")
 require_relative File.join(root, "lib", "yaml_loader")
 require_relative File.join(root, "lib", "episode_filtering")
@@ -13,32 +14,35 @@ require_relative File.join(root, "lib", "atomic_writer")
 module PodgenCLI
   class ScrapCommand
     include PodcastCommand
+    include EpisodeSelector
 
     SUFFIXES = [""] + ("a".."z").to_a
 
     def initialize(args, options)
       @exclude = false
-      @episode_id = nil
       OptionParser.new do |opts|
+        opts.banner = "Usage: podgen scrap <podcast> [<date>] [--date DATE] [--exclude]"
         opts.on("--exclude", "Also exclude episode URL from future processing") { @exclude = true }
-        opts.on("--date DATE", "Episode date (YYYY-MM-DD)") { |v| @episode_id = v }
+        opts.on("--date DATE", "Episode date YYYY-MM-DD[a-z] (also accepted as trailing positional; short forms MMDD, MM-DD, DD use current year/month)") { |v| @date_arg = v }
       end.parse!(args)
 
       first_arg = args.first
       if first_arg && (first_arg.include?("/") || File.exist?(first_arg))
         resolved = resolve_from_path(args.shift)
         if resolved
-          @podcast_name, @episode_id = resolved unless @episode_id
-          @podcast_name ||= resolved[0]
+          @podcast_name = resolved[0]
+          @date_arg ||= resolved[1]
         else
           $stderr.puts "Could not determine podcast/episode from path: #{first_arg}"
           @podcast_name = nil
         end
       else
         @podcast_name = args.shift
-        @episode_id ||= args.shift # optional: e.g. "2026-03-31b"
+        extract_positional_date!(args)
       end
       reject_leftover_args!(args)
+      validate_episode_selection!
+      @episode_id = normalized_episode_id
       @options = options
       @dry_run = options[:dry_run] || false
     end

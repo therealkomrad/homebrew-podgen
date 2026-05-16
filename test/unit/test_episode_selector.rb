@@ -203,4 +203,19 @@ class TestEpisodeSelectorMixin < Minitest::Test
     h = Harness.new(["0331b"])
     assert_equal "0331b", h.episode_id
   end
+
+  def test_normalized_episode_id_canonical_form
+    h = Harness.new(["0331b"])
+    assert_equal "2026-03-31b", h.normalized_episode_id
+  end
+
+  def test_normalized_episode_id_no_suffix
+    h = Harness.new(["2026-03-31"])
+    assert_equal "2026-03-31", h.normalized_episode_id
+  end
+
+  def test_normalized_episode_id_nil_without_date
+    h = Harness.new([])
+    assert_nil h.normalized_episode_id
+  end
 end

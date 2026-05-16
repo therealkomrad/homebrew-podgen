@@ -6,6 +6,7 @@ require "optparse"
 require "date"
 require "fileutils"
 require_relative File.join(root, "lib", "cli", "podcast_command")
+require_relative File.join(root, "lib", "cli", "episode_selector")
 require_relative File.join(root, "lib", "logger")
 require_relative File.join(root, "lib", "script_artifact")
 require_relative File.join(root, "lib", "voicer")
@@ -24,42 +25,37 @@ module PodgenCLI
   #   podgen voice fulgur_news --last 5 --lang jp        # 5 most recent episodes
   class VoiceCommand
     include PodcastCommand
+    include EpisodeSelector
 
     def initialize(args, options)
       @options = options
-      @date = nil
-      @last_n = nil
       @lang_filter = nil
       @force = false
 
       OptionParser.new do |opts|
-        opts.banner = "Usage: podgen voice <podcast> [--date YYYY-MM-DD | --last N] [--lang LANG] [--force]"
-        opts.on("--date DATE", "Episode date (default: today)") { |d| @date = Date.parse(d) }
-        opts.on("--last N", Integer, "Voice the N most recent episodes (mutually exclusive with --date)") { |n| @last_n = n }
+        opts.banner = "Usage: podgen voice <podcast> [<date>] [--date DATE | --last N] [--lang LANG] [--force]"
+        add_episode_selection_options!(opts)
         opts.on("--lang LANG", "Only voice this language") { |l| @lang_filter = l.downcase }
         opts.on("--force", "Re-voice even if MP3 already exists") { @force = true }
       end.parse!(args)
 
       @podcast_name = args.shift
+      extract_positional_date!(args)
       reject_leftover_args!(args)
+      validate_episode_selection!
     end
 
     def run
       code = require_podcast!("voice <podcast>")
       return code if code
 
-      if @date && @last_n
-        $stderr.puts "Error: --date and --last are mutually exclusive"
-        return 2
-      end
-
       config = load_config!
-      logger = PodcastAgent::Logger.new(log_path: config.log_path(@date || Date.today), verbosity: @options[:verbosity])
+      logger = PodcastAgent::Logger.new(log_path: config.log_path(episode_date || Date.today), verbosity: @options[:verbosity])
       PodcastAgent.logger = logger
 
       basenames = resolve_basenames(config)
       if basenames.empty?
-        msg = @last_n ? "No episodes found in #{config.episodes_dir}" : "No script found for #{(@date || Date.today)} in #{config.episodes_dir}"
+        msg = last_n ? "No episodes found in #{config.episodes_dir}" : "No script found for #{(episode_date || Date.today)} in #{config.episodes_dir}"
         $stderr.puts msg unless @options[:verbosity] == :quiet
         logger.log(msg)
         return 1
@@ -143,19 +139,22 @@ module PodgenCLI
     private
 
     # Resolves which episode basenames to operate on:
-    # --date Y-M-D → that date's basename (if a script exists)
-    # --last N     → N most recent English script files in episodes_dir
-    # neither      → today's basename
+    # --date Y-M-D     → all basenames for that date (no suffix filter)
+    # --date Y-M-D{x}  → that exact basename
+    # --last N         → N most recent English script files in episodes_dir
+    # neither          → today's basename
     def resolve_basenames(config)
-      if @last_n
-        english_script_basenames(config).sort.last(@last_n)
-      elsif @date
-        # Find ALL existing English script basenames matching the date.
-        # Don't use config.episode_basename(date) — that returns the
-        # NEXT-available suffix for creating new episodes, not the
-        # existing ones we want to re-voice.
-        date_str = @date.strftime("%Y-%m-%d")
-        english_script_basenames(config).select { |b| b.include?(date_str) }
+      if last_n
+        english_script_basenames(config).sort.last(last_n)
+      elsif episode_date
+        # Find existing English script basenames matching the date (and
+        # suffix, if given). Don't use config.episode_basename — that
+        # returns the NEXT-available suffix for creating new episodes,
+        # not the existing ones we want to re-voice.
+        date_str = episode_date.strftime("%Y-%m-%d")
+        target = "#{config.name}-#{date_str}#{episode_suffix}"
+        bases = english_script_basenames(config)
+        episode_suffix ? bases.select { |b| b == target } : bases.select { |b| b.include?(date_str) }
       else
         # Default: today's basename if its script exists.
         base = config.episode_basename(Date.today)

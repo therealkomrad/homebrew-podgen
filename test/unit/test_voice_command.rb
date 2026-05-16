@@ -26,8 +26,38 @@ class TestVoiceCommand < Minitest::Test
 
   def test_command_parses_force_and_date
     cmd = PodgenCLI::VoiceCommand.new(["--date", "2026-04-26", "--force", "fulgur_news"], { verbosity: :normal })
-    assert_equal Date.parse("2026-04-26"), cmd.instance_variable_get(:@date)
+    assert_equal Date.new(2026, 4, 26), cmd.episode_date
     assert cmd.instance_variable_get(:@force)
+  end
+
+  def test_command_accepts_positional_date
+    cmd = PodgenCLI::VoiceCommand.new(["fulgur_news", "2026-04-26"], { verbosity: :normal })
+    assert_equal Date.new(2026, 4, 26), cmd.episode_date
+    assert_equal "fulgur_news", cmd.instance_variable_get(:@podcast_name)
+  end
+
+  def test_command_accepts_positional_date_with_suffix
+    cmd = PodgenCLI::VoiceCommand.new(["fulgur_news", "2026-04-26b"], { verbosity: :normal })
+    assert_equal Date.new(2026, 4, 26), cmd.episode_date
+    assert_equal "b", cmd.episode_suffix
+  end
+
+  def test_command_accepts_positional_short_date
+    cmd = PodgenCLI::VoiceCommand.new(["fulgur_news", "0426"], { verbosity: :normal })
+    today = Date.today
+    assert_equal Date.new(today.year, 4, 26), cmd.episode_date
+  end
+
+  def test_command_rejects_positional_and_flag_date_together
+    assert_raises(OptionParser::ParseError) do
+      PodgenCLI::VoiceCommand.new(["fulgur_news", "2026-04-26", "--date", "2026-04-27"], { verbosity: :normal })
+    end
+  end
+
+  def test_command_rejects_date_and_last_together
+    assert_raises(OptionParser::ParseError) do
+      PodgenCLI::VoiceCommand.new(["--date", "2026-04-26", "--last", "3", "fulgur_news"], { verbosity: :normal })
+    end
   end
 
   def test_command_skips_existing_mp3_without_force

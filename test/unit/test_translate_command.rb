@@ -246,4 +246,53 @@ class TestTranslateCommand < Minitest::Test
   def build_command
     PodgenCLI::TranslateCommand.allocate
   end
+
+  public
+
+  # --- date selection ---
+
+  def test_command_accepts_date_flag
+    cmd = PodgenCLI::TranslateCommand.new(["--date", "2026-01-15", "mypod"], {})
+    assert_equal Date.new(2026, 1, 15), cmd.episode_date
+  end
+
+  def test_command_accepts_positional_date
+    cmd = PodgenCLI::TranslateCommand.new(["mypod", "2026-01-15"], {})
+    assert_equal Date.new(2026, 1, 15), cmd.episode_date
+  end
+
+  def test_command_accepts_positional_short_date
+    cmd = PodgenCLI::TranslateCommand.new(["mypod", "0115"], {})
+    today = Date.today
+    assert_equal Date.new(today.year, 1, 15), cmd.episode_date
+  end
+
+  def test_command_rejects_date_and_last_together
+    assert_raises(OptionParser::ParseError) do
+      PodgenCLI::TranslateCommand.new(["--date", "2026-01-15", "--last", "3", "mypod"], {})
+    end
+  end
+
+  def test_filter_by_date_matches_full_date
+    cmd = build_command
+    episodes = [
+      { basename: "mypod-2026-01-15" },
+      { basename: "mypod-2026-01-15b" },
+      { basename: "mypod-2026-01-16" }
+    ]
+    result = cmd.send(:filter_by_date, episodes, Date.new(2026, 1, 15), nil)
+    assert_equal 2, result.length
+    refute(result.any? { |e| e[:basename].include?("01-16") })
+  end
+
+  def test_filter_by_date_narrows_to_suffix
+    cmd = build_command
+    episodes = [
+      { basename: "mypod-2026-01-15" },
+      { basename: "mypod-2026-01-15a" },
+      { basename: "mypod-2026-01-15b" }
+    ]
+    result = cmd.send(:filter_by_date, episodes, Date.new(2026, 1, 15), "a")
+    assert_equal [{ basename: "mypod-2026-01-15a" }], result
+  end
 end

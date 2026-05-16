@@ -5,6 +5,7 @@ root = File.expand_path("../..", __dir__)
 require "optparse"
 require "fileutils"
 require_relative File.join(root, "lib", "cli", "podcast_command")
+require_relative File.join(root, "lib", "cli", "episode_selector")
 require_relative File.join(root, "lib", "logger")
 require_relative File.join(root, "lib", "agents", "translation_agent")
 require_relative File.join(root, "lib", "agents", "tts_agent")
@@ -18,22 +19,25 @@ require_relative File.join(root, "lib", "legacy_script_parser")
 module PodgenCLI
   class TranslateCommand
     include PodcastCommand
+    include EpisodeSelector
 
     def initialize(args, options)
       @options = options
-      @last_n = nil
       @lang_filter = nil
       @force = false
 
       OptionParser.new do |opts|
-        opts.on("--last N", Integer, "Only translate the N most recent episodes") { |n| @last_n = n }
+        opts.banner = "Usage: podgen translate <podcast> [<date>] [--date DATE | --last N] [--lang LANG] [--force]"
+        add_episode_selection_options!(opts)
         opts.on("--lang LANG", "Only translate to this language (e.g. it)") { |l| @lang_filter = l.downcase }
         opts.on("--force", "Re-translate even if the language MP3 already exists") { @force = true }
         opts.on("--dry-run", "Show what would be translated") { @options[:dry_run] = true }
       end.parse!(args)
 
       @podcast_name = args.shift
+      extract_positional_date!(args)
       reject_leftover_args!(args)
+      validate_episode_selection!
     end
 
     def run
@@ -69,8 +73,9 @@ module PodgenCLI
         return 0
       end
 
-      # Apply --last N limit
-      episodes = episodes.last(@last_n) if @last_n
+      # Apply --date / --last filtering
+      episodes = filter_by_date(episodes, episode_date, episode_suffix) if episode_date
+      episodes = episodes.last(last_n) if last_n
 
       # Find pending translations
       pending = pending_translations(episodes, languages, config.episodes_dir)
@@ -132,6 +137,17 @@ module PodgenCLI
     end
 
     private
+
+    # Narrows the episode list to a specific date. With a suffix, narrows
+    # to that exact basename; without, matches every basename on the day.
+    def filter_by_date(episodes, date, suffix)
+      date_str = date.strftime("%Y-%m-%d")
+      if suffix
+        episodes.select { |e| e[:basename].end_with?("-#{date_str}#{suffix}") }
+      else
+        episodes.select { |e| e[:basename].match?(/-#{Regexp.escape(date_str)}[a-z]?\z/) }
+      end
+    end
 
     # Finds English episodes that have both _script.md and .mp3 files.
     # Excludes language-suffixed scripts (e.g. *-it_script.md) and

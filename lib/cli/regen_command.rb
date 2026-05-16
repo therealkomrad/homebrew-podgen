@@ -162,11 +162,13 @@ module PodgenCLI
       end
     end
 
-    # Resolves which English episode basenames to operate on. Mirrors the
-    # convention used by voice/render: --date narrows to that day (and
-    # suffix if given); --last N takes the most-recent N; nothing → latest.
+    # Resolves which English episode basenames to operate on. Enumerates
+    # via `.mp3` files (not `_script.md`) because regen targets binary
+    # artifacts that exist for both pipelines, and language-pipeline
+    # podcasts never produce `_script.md`. --date narrows to that day
+    # (and suffix if given); --last N takes the most-recent N; nothing → latest.
     def resolve_basenames(config)
-      all_bases = english_script_basenames(config)
+      all_bases = english_episode_basenames(config)
       return [] if all_bases.empty?
 
       if last_n

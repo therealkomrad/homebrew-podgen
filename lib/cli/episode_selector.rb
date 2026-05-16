@@ -144,14 +144,28 @@ module PodgenCLI
       @last_n
     end
 
-    # English (non-language-suffixed) episode basenames found under the
-    # podcast's episodes_dir, sorted chronologically. Shared by voice,
-    # regen, and any other command that needs to enumerate episodes.
+    # English (non-language-suffixed) basenames of episodes that have a
+    # `_script.md` file. Use this for commands that only make sense on
+    # script-bearing episodes — most notably `voice`, which re-voices
+    # from the saved script JSON. NOT pipeline-agnostic: language-pipeline
+    # podcasts never produce `_script.md` so this returns [] for them.
     def english_script_basenames(config)
       Dir.glob(File.join(config.episodes_dir, "*_script.md"))
         .reject { |f| File.basename(f).match?(/-[a-z]{2}_script\.md\z/) }
         .sort
         .map { |f| File.basename(f, "_script.md") }
+    end
+
+    # English (non-language-suffixed) basenames of every episode in the
+    # podcast, identified by the `.mp3` artifact (the only file every
+    # pipeline produces). Use this for commands that operate on the
+    # produced episode regardless of how it was authored — regen, cover,
+    # etc. Excludes per-language MP3s like `-jp.mp3`.
+    def english_episode_basenames(config)
+      Dir.glob(File.join(config.episodes_dir, "*.mp3"))
+        .reject { |f| File.basename(f).match?(/-[a-z]{2}\.mp3\z/) }
+        .sort
+        .map { |f| File.basename(f, ".mp3") }
     end
 
     private

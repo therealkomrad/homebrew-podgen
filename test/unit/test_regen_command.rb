@@ -214,6 +214,24 @@ class TestRegenCommand < Minitest::Test
     assert_match(/mypod-2026-05-16d\.mp4\z/, targeted.first)
   end
 
+  # Regression: language-pipeline podcasts (bajke etc.) produce no _script.md
+  # files — only _transcript.md. The previous resolve_basenames implementation
+  # used english_script_basenames, which returned an empty list for these
+  # podcasts, so `podgen regen bajke <date>` failed with "No episodes matched."
+  def test_regen_targets_language_pipeline_episode_without_script_md
+    write_language_episode_files("mypod-2026-05-16", with_cover: true)
+
+    srt_calls = []
+    SubtitleGenerator.stub(:generate_srt, ->(ts, srt) { srt_calls << [ts, srt]; true }) do
+      cmd = PodgenCLI::RegenCommand.new(["mypod", "2026-05-16", "--subtitles"], { verbosity: :quiet })
+      @code = cmd.run
+    end
+
+    assert_equal 0, @code
+    assert_equal 1, srt_calls.length
+    assert_match(/mypod-2026-05-16_timestamps\.json\z/, srt_calls.first[0])
+  end
+
   def test_date_without_suffix_matches_all_suffixes_on_that_date
     write_episode_files("mypod-2026-05-16", with_cover: true)
     write_episode_files("mypod-2026-05-16a", with_cover: true)
@@ -241,6 +259,7 @@ class TestRegenCommand < Minitest::Test
     config
   end
 
+  # Writes a news-pipeline-style episode (has _script.md).
   def write_episode_files(base, timestamps: true, with_cover: false, with_mp4: false)
     dir = @config.episodes_dir
     File.write(File.join(dir, "#{base}_script.md"), "# T\n\n## Opening\n\nC.\n")
@@ -254,5 +273,19 @@ class TestRegenCommand < Minitest::Test
     end
     File.write(File.join(dir, "#{base}_cover.jpg"), "img") if with_cover
     File.write(File.join(dir, "#{base}.mp4"), "video") if with_mp4
+  end
+
+  # Writes a language-pipeline-style episode (no _script.md, only _transcript.md).
+  # This mirrors how bajke / lahko_noc / other language podcasts produce their
+  # episodes: the source audio is transcribed, no script is ever authored.
+  def write_language_episode_files(base, with_cover: false)
+    dir = @config.episodes_dir
+    File.write(File.join(dir, "#{base}_transcript.md"), "# T\n\n## Transcript\n\nC.\n")
+    File.write(File.join(dir, "#{base}.mp3"), "audio")
+    File.write(File.join(dir, "#{base}_timestamps.json"), JSON.pretty_generate(
+      "version" => 1, "engine" => "groq", "intro_duration" => 0.0,
+      "segments" => [{ "start" => 0.0, "end" => 1.0, "text" => "x" }]
+    ))
+    File.write(File.join(dir, "#{base}_cover.jpg"), "img") if with_cover
   end
 end

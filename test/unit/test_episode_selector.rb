@@ -240,6 +240,58 @@ class TestEpisodeSelectorMixin < Minitest::Test
     assert_nil h.last_n
   end
 
+  # ── english_episode_basenames ─────────────────────────────────────
+
+  class FakeConfig
+    attr_reader :episodes_dir
+    def initialize(dir); @episodes_dir = dir; end
+  end
+
+  def with_episodes_dir
+    Dir.mktmpdir("ep_dir") do |dir|
+      yield FakeConfig.new(dir), dir
+    end
+  end
+
+  def test_english_episode_basenames_returns_base_mp3s
+    with_episodes_dir do |config, dir|
+      File.write(File.join(dir, "pod-2026-05-14.mp3"), "")
+      File.write(File.join(dir, "pod-2026-05-16.mp3"), "")
+      h = Harness.new([])
+      assert_equal %w[pod-2026-05-14 pod-2026-05-16], h.english_episode_basenames(config)
+    end
+  end
+
+  def test_english_episode_basenames_excludes_language_variants
+    with_episodes_dir do |config, dir|
+      File.write(File.join(dir, "pod-2026-05-16.mp3"), "")
+      File.write(File.join(dir, "pod-2026-05-16-jp.mp3"), "")
+      File.write(File.join(dir, "pod-2026-05-16-it.mp3"), "")
+      h = Harness.new([])
+      assert_equal %w[pod-2026-05-16], h.english_episode_basenames(config)
+    end
+  end
+
+  def test_english_episode_basenames_finds_language_pipeline_episodes_without_scripts
+    # Regression check that mirrors the bajke bug: language-pipeline podcasts
+    # never produce _script.md, but every episode has a .mp3. The new helper
+    # should find them where english_script_basenames does not.
+    with_episodes_dir do |config, dir|
+      File.write(File.join(dir, "pod-2026-05-16.mp3"), "")
+      File.write(File.join(dir, "pod-2026-05-16_transcript.md"), "")
+      h = Harness.new([])
+      assert_equal %w[pod-2026-05-16], h.english_episode_basenames(config)
+      assert_empty h.english_script_basenames(config)
+    end
+  end
+
+  def test_english_episode_basenames_empty_when_dir_empty
+    with_episodes_dir do |config, _|
+      h = Harness.new([])
+      assert_empty h.english_episode_basenames(config)
+    end
+  end
+
   def test_add_date_option_rejects_last_flag
     harness = Class.new do
       include PodgenCLI::EpisodeSelector

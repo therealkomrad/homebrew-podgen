@@ -168,19 +168,25 @@ class YouTubePublisher
   end
 
   def ensure_video(ep, errors)
-    video_path = File.join(@config.episodes_dir, "#{ep[:base_name]}.mp4")
-    return video_path if File.exist?(video_path)
+    require_relative "video_builder"
 
+    video_path = File.join(@config.episodes_dir, "#{ep[:base_name]}.mp4")
     cover_path = CoverResolver.find_episode_cover(@config.episodes_dir, ep[:base_name])
-    unless cover_path
+
+    puts "  generating video #{ep[:base_name]}..." if !File.exist?(video_path) && cover_path && !quiet?
+    result = VideoBuilder.build(mp3_path: ep[:mp3_path], cover_path: cover_path, video_path: video_path)
+
+    case result.status
+    when :built, :exists then result.video_path
+    when :no_cover
       $stderr.puts "  ✗ #{ep[:base_name]} skipped: no cover image found"
       errors << { type: :missing_cover, base: ep[:base_name], message: "no cover image" }
-      return nil
+      nil
+    when :no_audio, :failed
+      $stderr.puts "  ✗ #{ep[:base_name]} video step failed: #{result.message}"
+      errors << { type: :video, base: ep[:base_name], message: result.message }
+      nil
     end
-
-    puts "  generating video #{ep[:base_name]}..." unless quiet?
-    VideoGenerator.new.generate(ep[:mp3_path], cover_path, video_path)
-    video_path
   end
 
   def regenerate!

@@ -113,6 +113,7 @@ ruby bin/podgen <command> [options]
 | `podgen revocab <podcast> [episode]`  | Re-annotate vocabulary on transcripts                    |
 | `podgen reformat <podcast> [episode]` | Reformat transcripts (paragraph breaks, cleanup)         |
 | `podgen cover <podcast> [date]`       | Generate episode cover images (use --title, --image flags) |
+| `podgen regen <podcast> [date]`       | Regenerate .mp4 / .srt / reconciled timestamps for an existing episode |
 | `podgen fork <old> <new>`             | Fork podcast into a new namespace                        |
 | `podgen test <name>`                  | Run a component test (research, hn, rss, tts, etc.)      |
 | `podgen schedule <podcast>`           | Install, remove, or inspect a daily launchd scheduler    |
@@ -139,7 +140,7 @@ podgen render fulgur_news 0426               # short — current year
 podgen scrap fulgur_news 26b                 # short — current year/month, suffix "b"
 ```
 
-`voice`, `render`, and `translate` also accept `--last N` (most recent N episodes), which is mutually exclusive with a date.
+`voice`, `render`, `translate`, and `regen` also accept `--last N` (most recent N episodes), which is mutually exclusive with a date.
 
 
 ### Global flags
@@ -823,6 +824,28 @@ podgen cover --clean                                          # same, across all
 | `--gravity POS`     | Override ImageMagick gravity (`Center`, `South`, …)  |
 | `--x-offset N`      | Override horizontal text offset                      |
 | `--y-offset N`      | Override vertical text offset                        |
+
+#### Regen command
+
+`podgen regen` rebuilds the post-pipeline binary artifacts for an existing episode without re-running the full pipeline: the YouTube `.mp4` video, the `.srt` subtitle file, and the reconciled timestamps. Each artifact is normally produced once during `generate` (and skipped on subsequent invocations); `regen` is the explicit escape hatch when one of them needs to be redone — e.g. after a transient reconciliation failure or a cover swap that requires re-rendering the video.
+
+```bash
+podgen regen bajke 2026-05-16d --reconcile   # retry Claude reconciliation + regen .srt
+podgen regen bajke 0516d --video             # rebuild .mp4 (uses current cover)
+podgen regen bajke --subtitles               # latest episode — regen .srt from existing timestamps
+podgen regen bajke 2026-05-16d --all         # reconcile + .srt + .mp4
+podgen regen bajke --last 3 --subtitles      # batch
+```
+
+| Flag           | Description                                                                              |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| `--reconcile`  | Re-run Claude reconciliation against `_timestamps.json` (ignores the `"reconciled": true` gate). Implies `--subtitles` since the old `.srt` is stale. |
+| `--subtitles`  | Regenerate `.srt` from the existing `_timestamps.json` (free, deterministic).            |
+| `--video`      | Delete `.mp4` and re-render from `.mp3` + current cover via `ffmpeg`.                    |
+| `--all`        | Shorthand for all three, in order: reconcile → subtitles → video.                        |
+| `--force`      | Currently a no-op (each step already forces regeneration); reserved for future use.      |
+
+Episode selection follows the [shared rules](#selecting-an-episode): positional date, `--date`, short forms, and `--last N`. No date → latest episode.
 
 ### Site Customization
 

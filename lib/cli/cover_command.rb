@@ -34,7 +34,7 @@ module PodgenCLI
         opts.on("--image PATH", "Image file path, 'last' for latest ~/Desktop screenshot, or 'auto' to search") { |v| @image = v }
         opts.on("--base-image PATH", "Override base image") { |v| @overrides[:base_image] = v }
         opts.on("--output PATH", "Output file path") { |v| @output_path = v }
-        opts.on("--date DATE", "Episode date YYYY-MM-DD[a-z] (also accepted as trailing positional; short forms MMDD, MM-DD, DD use current year/month)") { |v| @date_arg = v }
+        add_date_option!(opts)
         opts.on("--title TEXT", "Cover title text") { |v| @title = v }
         opts.on("--font NAME", "Override font family") { |v| @overrides[:font] = v }
         opts.on("--font-color COLOR", "Override font color") { |v| @overrides[:font_color] = v }

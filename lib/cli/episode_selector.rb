@@ -8,6 +8,11 @@ module PodgenCLI
   # specific episode (or window of episodes). Include in the command class
   # and call inside its OptionParser block:
   #
+  #   add_date_option!(opts)     # adds --date
+  #   add_last_option!(opts)     # adds --last N (omit for commands where bulk is unsafe)
+  #
+  # …or the convenience wrapper for the common case:
+  #
   #   add_episode_selection_options!(opts)
   #
   # After parse!, call:
@@ -16,10 +21,16 @@ module PodgenCLI
   #   reject_leftover_args!(args)
   #   validate_episode_selection!
   #
-  # Then read via #episode_date, #episode_suffix, #episode_id, #last_n.
+  # Then read via #episode_date, #episode_suffix, #raw_episode_id,
+  # #normalized_episode_id, #last_n.
+  #
+  # Instance variables owned by this mixin (don't reuse these names for
+  # other purposes): @date_arg, @last_n, @parsed_date, @parsed_suffix.
   module EpisodeSelector
     # Token shape used to decide whether the trailing positional is a date:
     # one or more digits/hyphens, optional single trailing lowercase letter.
+    # Single-digit positionals are intentional — `podgen voice mypod 1` is
+    # "day 1 of the current month". See test_positional_single_digit_day.
     DATE_TOKEN_RE = /\A\d[\d-]*[a-z]?\z/
 
     # Parses the flexible date forms accepted on the command line.
@@ -58,24 +69,34 @@ module PodgenCLI
       end
 
       # Returns [year, month, day] or nil if the body doesn't match a supported form.
+      # MM-DD accepts single-digit month or day (e.g. "3-31", "3-1") for symmetry
+      # with the bare DD form. MMDD is strict-4-digit to stay disjoint from DD.
       def extract_ymd(body, today)
         case body
-        when /\A(\d{4})-(\d{2})-(\d{2})\z/ then [$1.to_i, $2.to_i, $3.to_i]
-        when /\A(\d{4})(\d{2})(\d{2})\z/   then [$1.to_i, $2.to_i, $3.to_i]
-        when /\A(\d{2})-(\d{2})\z/         then [today.year, $1.to_i, $2.to_i]
-        when /\A(\d{2})(\d{2})\z/          then [today.year, $1.to_i, $2.to_i]
-        when /\A(\d{1,2})\z/               then [today.year, today.month, $1.to_i]
+        when /\A(\d{4})-(\d{2})-(\d{2})\z/   then [$1.to_i, $2.to_i, $3.to_i]
+        when /\A(\d{4})(\d{2})(\d{2})\z/     then [$1.to_i, $2.to_i, $3.to_i]
+        when /\A(\d{1,2})-(\d{1,2})\z/       then [today.year, $1.to_i, $2.to_i]
+        when /\A(\d{2})(\d{2})\z/            then [today.year, $1.to_i, $2.to_i]
+        when /\A(\d{1,2})\z/                 then [today.year, today.month, $1.to_i]
         end
       end
     end
 
-    def add_episode_selection_options!(opts)
+    def add_date_option!(opts)
       opts.on("--date DATE", "Episode date YYYY-MM-DD[a-z] (also accepted as trailing positional; short forms MMDD, MM-DD, DD use current year/month)") do |v|
         @date_arg = v
       end
+    end
+
+    def add_last_option!(opts)
       opts.on("--last N", Integer, "Operate on N most recent episodes (mutually exclusive with --date)") do |n|
         @last_n = n
       end
+    end
+
+    def add_episode_selection_options!(opts)
+      add_date_option!(opts)
+      add_last_option!(opts)
     end
 
     # Pops a trailing positional date if present. Raises if it duplicates --date.
@@ -106,12 +127,14 @@ module PodgenCLI
       @parsed_suffix
     end
 
-    def episode_id
+    # Raw user-typed date string (whatever shape they passed). Most callers
+    # want #normalized_episode_id instead.
+    def raw_episode_id
       @date_arg
     end
 
-    # The episode identifier in canonical "YYYY-MM-DD[a-z]" form, regardless
-    # of the input shape the user typed. Nil when no date was given.
+    # Episode identifier in canonical "YYYY-MM-DD[a-z]" form regardless of
+    # the input shape the user typed. Nil when no date was given.
     def normalized_episode_id
       return nil unless episode_date
       "#{episode_date.strftime('%Y-%m-%d')}#{episode_suffix}"
@@ -129,9 +152,10 @@ module PodgenCLI
       raise OptionParser::ParseError, e.message
     end
 
-    # Overridable seam for tests.
+    # Uniquely named hook so a future includer that defines `today` for its
+    # own reasons doesn't accidentally hijack date resolution here.
     def episode_selector_today
-      respond_to?(:today, true) ? send(:today) : Date.today
+      respond_to?(:episode_selector_today_override, true) ? send(:episode_selector_today_override) : Date.today
     end
   end
 end

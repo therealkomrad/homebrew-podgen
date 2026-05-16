@@ -21,8 +21,9 @@ module PodgenCLI
   #
   # Examples:
   #   podgen voice fulgur_news --lang jp
-  #   podgen voice fulgur_news --date 2026-04-26 --lang jp --force
-  #   podgen voice fulgur_news --last 5 --lang jp        # 5 most recent episodes
+  #   podgen voice fulgur_news 2026-04-26 --lang jp --force   # positional date
+  #   podgen voice fulgur_news --date 0426                    # short form
+  #   podgen voice fulgur_news --last 5 --lang jp             # 5 most recent
   class VoiceCommand
     include PodcastCommand
     include EpisodeSelector

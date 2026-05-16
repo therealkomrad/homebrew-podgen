@@ -23,7 +23,7 @@ module PodgenCLI
       OptionParser.new do |opts|
         opts.banner = "Usage: podgen scrap <podcast> [<date>] [--date DATE] [--exclude]"
         opts.on("--exclude", "Also exclude episode URL from future processing") { @exclude = true }
-        opts.on("--date DATE", "Episode date YYYY-MM-DD[a-z] (also accepted as trailing positional; short forms MMDD, MM-DD, DD use current year/month)") { |v| @date_arg = v }
+        add_date_option!(opts)
       end.parse!(args)
 
       first_arg = args.first

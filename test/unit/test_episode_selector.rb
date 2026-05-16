@@ -40,6 +40,16 @@ class TestEpisodeDateParser < Minitest::Test
       PodgenCLI::EpisodeSelector::DateParser.parse("03-31a", today: TODAY)
   end
 
+  def test_parse_mm_dd_single_digit_month
+    assert_equal [Date.new(2026, 3, 31), nil],
+      PodgenCLI::EpisodeSelector::DateParser.parse("3-31", today: TODAY)
+  end
+
+  def test_parse_mm_dd_single_digit_month_and_day
+    assert_equal [Date.new(2026, 3, 1), nil],
+      PodgenCLI::EpisodeSelector::DateParser.parse("3-1", today: TODAY)
+  end
+
   def test_parse_mmdd_uses_current_year
     assert_equal [Date.new(2026, 3, 31), nil],
       PodgenCLI::EpisodeSelector::DateParser.parse("0331", today: TODAY)
@@ -127,7 +137,9 @@ class TestEpisodeSelectorMixin < Minitest::Test
       validate_episode_selection!
     end
 
-    def today = @today
+    private
+
+    def episode_selector_today_override = @today
   end
 
   def test_date_flag_sets_episode_date
@@ -199,9 +211,45 @@ class TestEpisodeSelectorMixin < Minitest::Test
     end
   end
 
-  def test_episode_id_preserves_raw_form
+  def test_positional_single_digit_day
+    # Documented short form: `podgen <cmd> mypod 1` resolves to day 1 of
+    # the current month. Single-digit positionals are accepted on purpose.
+    h = Harness.new(["1"])
+    assert_equal Date.new(2026, 5, 1), h.episode_date
+  end
+
+  def test_raw_episode_id_preserves_raw_form
     h = Harness.new(["0331b"])
-    assert_equal "0331b", h.episode_id
+    assert_equal "0331b", h.raw_episode_id
+  end
+
+  def test_add_date_option_alone
+    # Commands that only want --date (no --last) use add_date_option!
+    harness = Class.new do
+      include PodgenCLI::EpisodeSelector
+      def initialize(argv)
+        OptionParser.new { |o| add_date_option!(o) }.parse!(argv)
+        extract_positional_date!(argv)
+        validate_episode_selection!
+      end
+      private
+      def episode_selector_today_override = Date.new(2026, 5, 16)
+    end
+    h = harness.new(["--date", "2026-03-31"])
+    assert_equal Date.new(2026, 3, 31), h.episode_date
+    assert_nil h.last_n
+  end
+
+  def test_add_date_option_rejects_last_flag
+    harness = Class.new do
+      include PodgenCLI::EpisodeSelector
+      def initialize(argv)
+        OptionParser.new { |o| add_date_option!(o) }.parse!(argv)
+      end
+    end
+    assert_raises(OptionParser::InvalidOption) do
+      harness.new(["--last", "3"])
+    end
   end
 
   def test_normalized_episode_id_canonical_form

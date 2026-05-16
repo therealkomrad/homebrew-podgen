@@ -93,7 +93,7 @@ class TestCoverCommand < Minitest::Test
 
   def test_date_flag_sets_episode_id
     cmd = PodgenCLI::CoverCommand.new(["testpod", "--date", "2026-04-13"], {})
-    assert_equal "2026-04-13", cmd.instance_variable_get(:@episode_id)
+    assert_equal "2026-04-13", cmd.normalized_episode_id
     assert_nil cmd.instance_variable_get(:@title)
   end
 
@@ -104,7 +104,7 @@ class TestCoverCommand < Minitest::Test
 
   def test_date_and_title_flags_together
     cmd = PodgenCLI::CoverCommand.new(["testpod", "--date", "2026-04-13", "--title", "My Title"], {})
-    assert_equal "2026-04-13", cmd.instance_variable_get(:@episode_id)
+    assert_equal "2026-04-13", cmd.normalized_episode_id
     assert_equal "My Title", cmd.instance_variable_get(:@title)
   end
 
@@ -134,13 +134,13 @@ class TestCoverCommand < Minitest::Test
 
   def test_positional_date_equivalent_to_flag
     cmd = PodgenCLI::CoverCommand.new(["testpod", "2026-04-13"], {})
-    assert_equal "2026-04-13", cmd.instance_variable_get(:@episode_id)
+    assert_equal "2026-04-13", cmd.normalized_episode_id
   end
 
   def test_positional_short_date_with_suffix
     cmd = PodgenCLI::CoverCommand.new(["testpod", "0413b"], {})
     today = Date.today
-    assert_equal "#{today.year}-04-13b", cmd.instance_variable_get(:@episode_id)
+    assert_equal "#{today.year}-04-13b", cmd.normalized_episode_id
   end
 
   def test_positional_and_date_flag_together_is_error

@@ -94,98 +94,10 @@ class TestPublishCommand < Minitest::Test
     assert_nil description
   end
 
-  # --- scan_episodes ---
-
-  def test_scan_episodes_finds_mp3s_with_transcripts
-    create_mp3("ep-2026-01-15.mp3")
-    File.write(File.join(@episodes_dir, "ep-2026-01-15_transcript.md"), "# Title\n\nText")
-
-    cmd = build_command
-    episodes = cmd.send(:scan_episodes)
-
-    assert_equal 1, episodes.length
-    assert_equal "ep-2026-01-15", episodes.first[:base_name]
-  end
-
-  def test_scan_episodes_skips_mp3_without_transcript
-    create_mp3("ep-2026-01-15.mp3")
-
-    cmd = build_command
-    episodes = cmd.send(:scan_episodes)
-
-    assert_empty episodes
-  end
-
-  def test_scan_episodes_sorted_chronologically
-    create_mp3("ep-2026-01-15.mp3")
-    create_mp3("ep-2026-01-16.mp3")
-    File.write(File.join(@episodes_dir, "ep-2026-01-15_transcript.md"), "# A")
-    File.write(File.join(@episodes_dir, "ep-2026-01-16_transcript.md"), "# B")
-
-    cmd = build_command
-    episodes = cmd.send(:scan_episodes)
-
-    assert_equal 2, episodes.length
-    assert_equal "ep-2026-01-15", episodes.first[:base_name]
-    assert_equal "ep-2026-01-16", episodes.last[:base_name]
-  end
-
-  def test_scan_episodes_empty_directory
-    cmd = build_command
-    assert_empty cmd.send(:scan_episodes)
-  end
-
-  def test_scan_episodes_filters_by_episode_id
-    create_mp3("ep-2026-01-15.mp3")
-    create_mp3("ep-2026-01-16.mp3")
-    File.write(File.join(@episodes_dir, "ep-2026-01-15_transcript.md"), "# T1")
-    File.write(File.join(@episodes_dir, "ep-2026-01-16_transcript.md"), "# T2")
-
-    cmd = build_command(episode_id: "2026-01-16")
-    episodes = cmd.send(:scan_episodes)
-
-    assert_equal 1, episodes.length
-    assert_equal "ep-2026-01-16", episodes.first[:base_name]
-  end
-
-  def test_scan_episodes_filters_with_suffix
-    create_mp3("ep-2026-01-15.mp3")
-    create_mp3("ep-2026-01-15a.mp3")
-    File.write(File.join(@episodes_dir, "ep-2026-01-15_transcript.md"), "# T1")
-    File.write(File.join(@episodes_dir, "ep-2026-01-15a_transcript.md"), "# T2")
-
-    cmd = build_command(episode_id: "2026-01-15a")
-    episodes = cmd.send(:scan_episodes)
-
-    assert_equal 1, episodes.length
-    assert_equal "ep-2026-01-15a", episodes.first[:base_name]
-  end
-
-  def test_scan_episodes_no_match_returns_empty_with_warning
-    create_mp3("ep-2026-01-15.mp3")
-    File.write(File.join(@episodes_dir, "ep-2026-01-15_transcript.md"), "# T1")
-
-    cmd = build_command(episode_id: "2026-99-99")
-    matched = nil
-    _, err = capture_io { matched = cmd.send(:scan_episodes) }
-
-    assert_empty matched
-    assert_includes err, "No episode found matching"
-  end
-
-  def test_scan_episodes_newest_reverses_order
-    create_mp3("ep-2026-01-15.mp3")
-    create_mp3("ep-2026-01-16.mp3")
-    File.write(File.join(@episodes_dir, "ep-2026-01-15_transcript.md"), "# T1")
-    File.write(File.join(@episodes_dir, "ep-2026-01-16_transcript.md"), "# T2")
-
-    cmd = build_command
-    cmd.instance_variable_get(:@options)[:newest] = true
-    episodes = cmd.send(:scan_episodes)
-
-    assert_equal "ep-2026-01-16", episodes.first[:base_name]
-    assert_equal "ep-2026-01-15", episodes.last[:base_name]
-  end
+  # scan_episodes was moved out of PublishCommand and into the shared
+  # EpisodeScanner module — see test_episode_scanner.rb for those tests.
+  # End-to-end filter behavior is covered by test_youtube_publisher.rb and
+  # test_lingq_publisher.rb.
 
   # --- upload_tracker ---
 
@@ -479,30 +391,7 @@ class TestPublishCommand < Minitest::Test
     assert_includes err.message, "2026-01-01"
   end
 
-  # --- find_text_file ---
-
-  def test_find_text_file_prefers_transcript
-    File.write(File.join(@episodes_dir, "ep-2026-01-01_transcript.md"), "# T\n\n## Transcript\n\nBody")
-    File.write(File.join(@episodes_dir, "ep-2026-01-01_script.md"), "# S\n\nScript body")
-
-    cmd = build_command
-    result = cmd.send(:find_text_file, @episodes_dir, "ep-2026-01-01")
-    assert_equal File.join(@episodes_dir, "ep-2026-01-01_transcript.md"), result
-  end
-
-  def test_find_text_file_falls_back_to_script
-    File.write(File.join(@episodes_dir, "ep-2026-01-01_script.md"), "# S\n\nScript body")
-
-    cmd = build_command
-    result = cmd.send(:find_text_file, @episodes_dir, "ep-2026-01-01")
-    assert_equal File.join(@episodes_dir, "ep-2026-01-01_script.md"), result
-  end
-
-  def test_find_text_file_returns_nil_when_missing
-    cmd = build_command
-    result = cmd.send(:find_text_file, @episodes_dir, "ep-2026-01-01")
-    assert_nil result
-  end
+  # find_text_file moved to EpisodeScanner — see test_episode_scanner.rb.
 
   private
 

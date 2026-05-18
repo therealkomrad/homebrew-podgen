@@ -38,13 +38,14 @@ class R2Publisher
   #   defaults to a real `system(env, *args)` call.
   # `twitter_agent:` injectable for tests; in production lazy-loaded from agents/twitter_agent.
   # `rclone_available:` injectable boolean; nil means "actually probe via Open3".
-  def initialize(config:, options: {}, runner: nil, twitter_agent: nil, tracker_path: nil, rclone_available: nil)
+  def initialize(config:, options: {}, runner: nil, twitter_agent: nil, tracker_path: nil, rclone_available: nil, episode_id: nil)
     @config = config
     @options = options
     @runner = runner
     @twitter_agent = twitter_agent
     @tracker_path = tracker_path
     @rclone_available_override = rclone_available
+    @episode_id = episode_id
   end
 
   def run

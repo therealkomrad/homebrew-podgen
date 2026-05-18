@@ -254,6 +254,58 @@ class TestYouTubePublisher < Minitest::Test
     assert data["youtube"]["default"]["ep-2026-01-15"]
   end
 
+  # Regression: `publish --youtube --date X` used to upload every episode
+  # because YouTubePublisher consumed its own scan_episodes which never
+  # honored the date filter. Combined with --force, that re-uploaded the
+  # entire back-catalog.
+  def test_episode_id_filters_uploads_to_matching_episode
+    seed_ep("ep-2026-01-14")
+    seed_ep("ep-2026-01-15")
+    seed_ep("ep-2026-01-16")
+
+    config = stub_config(youtube_enabled: true)
+    uploader = stub_uploader { |b| b.upload_video_returns "vid_x" }
+    publisher = build_publisher(config: config, uploader: uploader, episode_id: "2026-01-15")
+
+    result = nil
+    capture_io { result = publisher.run }
+
+    assert_equal 1, result.uploaded
+    assert_equal 1, uploader.uploads.length
+    assert_match(/ep-2026-01-15/, uploader.uploads.first[1][:title])
+  end
+
+  def test_episode_id_with_force_does_not_pull_in_other_episodes
+    seed_ep("ep-2026-01-14")
+    seed_ep("ep-2026-01-15")
+    seed_ep("ep-2026-01-16")
+
+    # Pre-populate the tracker as if all three were already uploaded.
+    require "yaml"
+    File.write(@uploads_path, YAML.dump(
+      "youtube" => { "default" => {
+        "ep-2026-01-14" => "vid_a",
+        "ep-2026-01-15" => "vid_b",
+        "ep-2026-01-16" => "vid_c"
+      } }
+    ))
+
+    config = stub_config(youtube_enabled: true)
+    uploader = stub_uploader { |b| b.upload_video_returns "vid_new" }
+    publisher = build_publisher(
+      config: config, uploader: uploader,
+      episode_id: "2026-01-15", options: { force: true, verbosity: :quiet }
+    )
+
+    result = nil
+    capture_io { result = publisher.run }
+
+    # --force ignores the tracker; --date narrows to one. Result: exactly 1 upload.
+    assert_equal 1, result.uploaded
+    assert_equal 1, uploader.uploads.length
+    assert_match(/ep-2026-01-15/, uploader.uploads.first[1][:title])
+  end
+
   private
 
   StubYouTubeConfig = Struct.new(:episodes_dir, :name, :transcription_language,
@@ -289,12 +341,13 @@ class TestYouTubePublisher < Minitest::Test
     File.write(File.join(@episodes_dir, "#{base}_transcript.md"), "# Title #{base}\n\n## Transcript\n\nHello.\n")
   end
 
-  def build_publisher(config:, uploader: nil, options: {})
+  def build_publisher(config:, uploader: nil, options: {}, episode_id: nil)
     YouTubePublisher.new(
       config: config,
       options: options,
       uploader: uploader,
-      tracker_path: @uploads_path
+      tracker_path: @uploads_path,
+      episode_id: episode_id
     )
   end
 

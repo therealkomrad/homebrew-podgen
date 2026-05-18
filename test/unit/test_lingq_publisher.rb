@@ -164,6 +164,54 @@ class TestLingQPublisher < Minitest::Test
     assert_empty agent.uploads
   end
 
+  # Regression: --date used to be ignored on the LingQ path (same bug as
+  # YouTube). Combined with --force, that re-uploaded the whole catalog.
+  def test_episode_id_filters_uploads_to_matching_episode
+    seed_ep("ep-2026-01-14")
+    seed_ep("ep-2026-01-15")
+    seed_ep("ep-2026-01-16")
+
+    config = stub_config(lingq_enabled: true)
+    agent = stub_agent { |a| a.upload_returns "lesson_x" }
+    publisher = build_publisher(config: config, agent: agent, episode_id: "2026-01-15")
+
+    result = nil
+    capture_io { result = publisher.run }
+
+    assert_equal 1, result.uploaded
+    assert_equal 1, agent.uploads.length
+    assert_match(/ep-2026-01-15/, agent.uploads.first[:title])
+  end
+
+  def test_episode_id_with_force_does_not_pull_in_other_episodes
+    seed_ep("ep-2026-01-14")
+    seed_ep("ep-2026-01-15")
+    seed_ep("ep-2026-01-16")
+
+    require "yaml"
+    File.write(@uploads_path, YAML.dump(
+      "lingq" => { "mycollection" => {
+        "ep-2026-01-14" => 1,
+        "ep-2026-01-15" => 2,
+        "ep-2026-01-16" => 3
+      } }
+    ))
+
+    config = stub_config(lingq_enabled: true)
+    agent = stub_agent { |a| a.upload_returns "lesson_new" }
+    publisher = build_publisher(
+      config: config, agent: agent,
+      episode_id: "2026-01-15", options: { force: true }
+    )
+
+    result = nil
+    capture_io { result = publisher.run }
+
+    assert_equal 1, result.uploaded
+    assert_equal 1, agent.uploads.length
+    assert_match(/ep-2026-01-15/, agent.uploads.first[:title])
+  end
+
   private
 
   StubLingQConfig = Struct.new(:episodes_dir, :name, :transcription_language,
@@ -196,12 +244,13 @@ class TestLingQPublisher < Minitest::Test
                "# Title #{base}\n\nDescription.\n\n## Transcript\n\nBody text.\n")
   end
 
-  def build_publisher(config:, agent: nil, options: {})
+  def build_publisher(config:, agent: nil, options: {}, episode_id: nil)
     LingQPublisher.new(
       config: config,
       options: options,
       agent: agent,
-      tracker_path: @uploads_path
+      tracker_path: @uploads_path,
+      episode_id: episode_id
     )
   end
 

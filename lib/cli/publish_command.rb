@@ -79,14 +79,14 @@ module PodgenCLI
     end
 
     def publish_to_r2
-      result = R2Publisher.new(config: @config, options: @options).run
+      result = R2Publisher.new(config: @config, options: @options, episode_id: @episode_id).run
       return 2 if result.errors.any? { |e| %i[rclone_missing missing_env].include?(e[:type]) }
       return 1 if result.errors.any? { |e| e[:type] == :rclone_failed }
       0
     end
 
     def publish_to_lingq
-      result = LingQPublisher.new(config: @config, options: @options).run
+      result = LingQPublisher.new(config: @config, options: @options, episode_id: @episode_id).run
       return 2 if result.errors.any? { |e| %i[not_configured no_language].include?(e[:type]) }
       0
     end
@@ -100,48 +100,13 @@ module PodgenCLI
       publisher = YouTubePublisher.new(
         config: @config,
         options: @options,
-        uploader: build_youtube_uploader
+        uploader: build_youtube_uploader,
+        episode_id: @episode_id
       )
       result = publisher.run
       return 2 if result.errors.any? { |e| e[:type] == :not_configured }
       return 1 if result.errors.any? { |e| e[:type] == :playlist_verification }
       0
-    end
-
-    # Scans episodes dir for mp3 files that have matching transcripts.
-    # Returns array of { base_name:, mp3_path:, transcript_path: } sorted chronologically.
-    # When @episode_id is set, filters to matching episodes only.
-    def scan_episodes
-      episodes_dir = @config.episodes_dir
-      return [] unless Dir.exist?(episodes_dir)
-
-      all = Dir.glob(File.join(episodes_dir, "*.mp3"))
-        .sort
-        .filter_map do |mp3_path|
-          base_name = File.basename(mp3_path, ".mp3")
-          text_path = find_text_file(episodes_dir, base_name)
-          next unless text_path
-
-          { base_name: base_name, mp3_path: mp3_path, transcript_path: text_path }
-        end
-
-      all.reverse! if @options[:newest]
-
-      return all unless @episode_id
-
-      matched = all.select { |ep| ep[:base_name].end_with?(@episode_id) }
-      if matched.empty?
-        $stderr.puts "No episode found matching '#{@episode_id}'"
-      end
-      matched
-    end
-
-    def find_text_file(dir, base_name)
-      %w[_transcript.md _script.md].each do |suffix|
-        path = File.join(dir, "#{base_name}#{suffix}")
-        return path if File.exist?(path)
-      end
-      nil
     end
 
     def build_youtube_uploader

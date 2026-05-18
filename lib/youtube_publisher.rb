@@ -43,11 +43,12 @@ class YouTubePublisher
     end
   end
 
-  def initialize(config:, options: {}, uploader: nil, tracker_path: nil)
+  def initialize(config:, options: {}, uploader: nil, tracker_path: nil, episode_id: nil)
     @config = config
     @options = options
     @uploader = uploader
     @tracker_path = tracker_path
+    @episode_id = episode_id
   end
 
   def run
@@ -65,6 +66,11 @@ class YouTubePublisher
     language = @config.transcription_language || "en"
 
     episodes = scan_episodes
+    if episodes.empty? && @episode_id
+      $stderr.puts "No episode found matching '#{@episode_id}'"
+      return Result.new(uploaded: 0, attempted: 0, rate_limited: false, errors: [])
+    end
+
     uploaded_map = @options[:force] ? {} : tracker.entries_for(:youtube, playlist)
     pending = episodes.reject { |ep| uploaded_map.key?(ep[:base_name]) }
     pending = pending.first(@options[:max]) if @options[:max]

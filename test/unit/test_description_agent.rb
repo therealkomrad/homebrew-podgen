@@ -69,6 +69,27 @@ class TestDescriptionAgent < Minitest::Test
     assert_equal "AI", sent
   end
 
+  # --- ALL CAPS normalization (post-LLM) ---
+  # Regression for fiabe-2026-05-17: the RSS title was
+  #   "LA VERA STORIA DELL'APE E DEL FIORE SENZA NOME di Julian Canettieri (vincitore...)"
+  # Mixed-case suffix pulled the uppercase ratio under 70%, so the input
+  # was not normalized. The LLM then stripped the suffix and returned
+  # "LA VERA STORIA DELL'APE E DEL FIORE SENZA NOME" — now all-caps but
+  # past the normalization point. Output must also be normalized.
+
+  def test_clean_title_normalizes_all_caps_in_llm_response
+    agent = build_agent("LA VERA STORIA DELL'APE E DEL FIORE SENZA NOME")
+    # Pre-normalization sees a mixed-case input and leaves it alone.
+    result = agent.clean_title(title: "Una storia: LA VERA STORIA DELL'APE E DEL FIORE SENZA NOME di Julian Canettieri")
+    assert_equal "La vera storia dell'ape e del fiore senza nome", result
+  end
+
+  def test_clean_title_leaves_properly_cased_llm_response_unchanged
+    agent = build_agent("La vera storia dell'ape")
+    result = agent.clean_title(title: "Una storia: La vera storia dell'ape")
+    assert_equal "La vera storia dell'ape", result
+  end
+
   # --- clean ---
 
   def test_clean_returns_cleaned_description

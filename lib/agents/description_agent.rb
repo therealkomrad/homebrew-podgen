@@ -44,6 +44,12 @@ class DescriptionAgent
       return title
     end
 
+    # Re-run screaming-caps normalization on the LLM output: stripping a
+    # mixed-case suffix from a screaming prefix flips a sub-threshold input
+    # into an over-threshold output, which the input-side normalization
+    # already missed.
+    result = normalize_screaming_title(result)
+
     if result != title
       log("Title cleaned: \"#{title}\" → \"#{result}\"")
     else

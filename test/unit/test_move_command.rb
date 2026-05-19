@@ -217,6 +217,47 @@ class TestMoveCommand < Minitest::Test
     assert File.exist?(File.join(@config.episodes_dir, "mypod-2026-05-16_transcript.md"))
   end
 
+  # Regression: a File.rename failure mid-move used to leave half-renamed
+  # state on disk + propagate a raw Ruby exception. Now the partial moves
+  # are rolled back and a clear error surfaces with a non-zero exit code.
+  def test_rename_failure_rolls_back_partial_state
+    write_episode("mypod-2026-05-16")
+    rename_call_count = 0
+    failed_yet = false
+    real_rename = File.method(:rename)
+
+    # Use Minitest::Mock-style stub via the canonical File.stub helper so
+    # the global File.rename is restored after the block — monkey-patching
+    # via define_singleton_method + remove_method strips the C built-in
+    # and breaks subsequent tests.
+    failing_rename = lambda do |src, dst|
+      rename_call_count += 1
+      if rename_call_count == 3 && !failed_yet
+        failed_yet = true
+        raise Errno::ENOSPC, "disk full"
+      end
+      real_rename.call(src, dst)
+    end
+
+    err_text = nil
+    File.stub(:rename, failing_rename) do
+      stub_rss do
+        _, err = capture_io { @code = run_move("mypod", "2026-05-16", "2026-05-20") }
+        err_text = err
+      end
+    end
+    assert_equal 1, @code
+    assert_match(/disk full/, err_text)
+    assert_match(/[Rr]oll(ed|ing).back/, err_text)
+
+    # Source files must all be back in place.
+    assert File.exist?(File.join(@config.episodes_dir, "mypod-2026-05-16.mp3"))
+    assert File.exist?(File.join(@config.episodes_dir, "mypod-2026-05-16_transcript.md"))
+    assert File.exist?(File.join(@config.episodes_dir, "mypod-2026-05-16_timestamps.json"))
+    refute File.exist?(File.join(@config.episodes_dir, "mypod-2026-05-20.mp3"))
+    refute File.exist?(File.join(@config.episodes_dir, "mypod-2026-05-20_transcript.md"))
+  end
+
   # ───── RSS regeneration is invoked ─────────────────────────────────
 
   def test_rss_regen_is_invoked_on_success

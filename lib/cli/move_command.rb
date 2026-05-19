@@ -180,23 +180,58 @@ module PodgenCLI
 
     # pairs: [[from_base, to_base], ...]
     # artifacts_per_base: { from_base => [path, ...] }
+    #
+    # Each pair's file renames are tracked so we can roll back if any
+    # rename fails partway. Pre-validation already ensured no target
+    # collisions exist, so failures here mean transient FS errors (disk
+    # full, permission, race) — surface them clearly and don't leave a
+    # half-moved episode on disk.
     def perform_move(config, pairs, to_date, artifacts_per_base:)
       moved_files = 0
+      completed_pairs = []
       pairs.each do |from_base, to_base|
-        artifacts_per_base[from_base].each do |old_path|
-          new_filename = File.basename(old_path).sub(/\A#{Regexp.escape(from_base)}/, to_base)
-          new_path = File.join(File.dirname(old_path), new_filename)
-          File.rename(old_path, new_path)
-          moved_files += 1
+        renamed_in_pair = []
+        begin
+          artifacts_per_base[from_base].each do |old_path|
+            new_filename = File.basename(old_path).sub(/\A#{Regexp.escape(from_base)}/, to_base)
+            new_path = File.join(File.dirname(old_path), new_filename)
+            File.rename(old_path, new_path)
+            renamed_in_pair << [old_path, new_path]
+            moved_files += 1
+          end
+        rescue => e
+          moved_files -= renamed_in_pair.length
+          rollback_renames!(renamed_in_pair)
+          $stderr.puts "Error renaming '#{from_base}' → '#{to_base}': #{e.message}"
+          $stderr.puts "Rolled back this episode's #{renamed_in_pair.length} partial rename(s)." if renamed_in_pair.any?
+          if completed_pairs.any?
+            $stderr.puts "Previously-moved episodes left in place (you may want to move them back manually): #{completed_pairs.map { |f, t| "#{f}→#{t}" }.join(', ')}"
+          end
+          return 1
         end
         EpisodeHistory.new(config.history_path).rename!(from_base, new_basename: to_base, new_date: to_date)
         UploadTracker.for_config(config).rename(from_base, to_base)
+        completed_pairs << [from_base, to_base]
         puts "  ✓ #{from_base} → #{to_base}" unless quiet?
       end
 
       regenerate_rss(config)
       puts "Moved #{pairs.length} episode(s), #{moved_files} file(s). RSS regenerated." unless quiet?
       0
+    end
+
+    # Reverse a partial set of file renames in reverse order so each
+    # reverse rename is into an empty slot. Best-effort — log per-file
+    # failures but don't raise (the caller has already failed and is
+    # about to return non-zero).
+    def rollback_renames!(renames)
+      renames.reverse_each do |old_path, new_path|
+        begin
+          File.rename(new_path, old_path)
+        rescue => e
+          $stderr.puts "  rollback failed for #{File.basename(new_path)} → #{File.basename(old_path)}: #{e.message}"
+        end
+      end
     end
 
     def regenerate_rss(config)

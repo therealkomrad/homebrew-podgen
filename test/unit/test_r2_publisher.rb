@@ -136,6 +136,29 @@ class TestR2Publisher < Minitest::Test
     assert_empty tweets, "no tweets when sync failed"
   end
 
+  # Regression: --date used to be ignored on the R2 path (same bug as
+  # YouTube and LingQ). The rclone sync itself stays wholesale by design,
+  # but the Twitter side-effect must respect the filter — otherwise
+  # `publish <pod> --date X` would tweet about every untweeted episode.
+  def test_episode_id_filters_tweets_to_matching_episode
+    seed_ep("ep-2026-05-01")
+    seed_ep("ep-2026-05-02")
+    seed_ep("ep-2026-05-03")
+    config = stub_config(twitter_enabled: true)
+    tweets = []
+    publisher = build_publisher(
+      config: config,
+      runner: ->(*) { true },
+      twitter_agent: stub_twitter_agent(tweets),
+      episode_id: "2026-05-02"
+    )
+
+    capture_io { publisher.run }
+
+    assert_equal 1, tweets.length
+    assert_match(/ep-2026-05-02/, tweets.first)
+  end
+
   def test_calls_regen_cache_once_per_pod
     seed_ep("ep-2026-01-15")
     config = stub_config
@@ -180,14 +203,15 @@ class TestR2Publisher < Minitest::Test
     File.write(File.join(@episodes_dir, "#{base}_transcript.md"), "# Title #{base}\n\nDescription text\n\n## Transcript\n\nBody.\n")
   end
 
-  def build_publisher(config:, runner:, twitter_agent: nil, options: {}, rclone_available: true)
+  def build_publisher(config:, runner:, twitter_agent: nil, options: {}, rclone_available: true, episode_id: nil)
     R2Publisher.new(
       config: config,
       options: options,
       runner: runner,
       twitter_agent: twitter_agent,
       tracker_path: @uploads_path,
-      rclone_available: rclone_available
+      rclone_available: rclone_available,
+      episode_id: episode_id
     )
   end
 

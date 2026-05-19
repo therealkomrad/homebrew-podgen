@@ -43,7 +43,7 @@ module PodgenCLI
         opts.on("--all",       "Shorthand for --reconcile --subtitles --video") do
           @reconcile = @subtitles = @video = true
         end
-        opts.on("--force",     "Force operations that would otherwise skip") { @force = true }
+        opts.on("--force",     "Reserved for future use; currently a no-op (each step already forces regeneration)") { @force = true }
       end.parse!(args)
 
       @podcast_name = args.shift

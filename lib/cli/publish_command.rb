@@ -1,28 +1,28 @@
 # frozen_string_literal: true
 
-require "open3"
 require "optparse"
-require "yaml"
-require "fileutils"
 
 root = File.expand_path("../..", __dir__)
 
 require_relative File.join(root, "lib", "cli", "podcast_command")
 require_relative File.join(root, "lib", "cli", "rss_command")
 require_relative File.join(root, "lib", "site_generator")
-require_relative File.join(root, "lib", "upload_tracker")
-require_relative File.join(root, "lib", "episode_filtering")
-require_relative File.join(root, "lib", "transcript_parser")
-require_relative File.join(root, "lib", "cover_resolver")
 require_relative File.join(root, "lib", "regen_cache")
 require_relative File.join(root, "lib", "r2_publisher")
 require_relative File.join(root, "lib", "lingq_publisher")
 require_relative File.join(root, "lib", "youtube_publisher")
 
 module PodgenCLI
+  # Thin dispatcher over R2Publisher / LingQPublisher / YouTubePublisher.
+  # All the per-target logic (rclone sync, LingQ upload, YouTube upload,
+  # subtitle reconciliation, retranscription, cover generation, upload
+  # tracking) lives in the publisher classes — this command only:
+  #   - parses CLI flags
+  #   - regenerates RSS + site once before dispatch (memoized via RegenCache)
+  #   - threads @episode_id into each publisher
+  #   - maps publisher errors to exit codes
   class PublishCommand
     include PodcastCommand
-    REQUIRED_ENV = %w[R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ENDPOINT R2_BUCKET].freeze
 
     def initialize(args, options)
       @options = options
@@ -111,113 +111,6 @@ module PodgenCLI
 
     def build_youtube_uploader
       YouTubeUploader.new
-    end
-
-    def reconcile_subtitles_if_needed(ts_path, transcript_path)
-      require_relative File.join(File.expand_path("../..", __dir__), "lib", "subtitle_reconciliation_runner")
-
-      result = SubtitleReconciliationRunner.run(ts_path: ts_path, transcript_path: transcript_path)
-      case result.status
-      when :reconciled
-        puts "  reconciled subtitles: #{File.basename(ts_path)}" unless @options[:verbosity] == :quiet
-      when :failed
-        $stderr.puts "  Warning: subtitle reconciliation failed: #{result.message} (using raw segments)"
-      # :already_reconciled, :no_api_key, :no_transcript, :no_timestamps —
-      # steady-state skips, intentionally silent to match pre-refactor behavior.
-      end
-    end
-
-    # Parses a transcript markdown file.
-    # Returns [title, description, transcript_text]
-    def parse_transcript(path)
-      parsed = TranscriptParser.parse(path)
-      [parsed.title, parsed.description, parsed.body]
-    end
-
-    # Check for a per-episode cover saved by generate --image
-    def find_episode_cover(base_name)
-      CoverResolver.find_episode_cover(@config.episodes_dir, base_name)
-    end
-
-    def generate_cover_image(title, description: nil)
-      return @config.cover_static_image unless @config.cover_generation_enabled?
-
-      result = CoverResolver.generate(
-        title: title,
-        base_image: @config.cover_base_image,
-        options: @config.cover_options
-      )
-      unless result
-        $stderr.puts "  Warning: cover generation failed (using static image)" if @options[:verbosity] == :verbose
-      end
-      result || @config.cover_static_image
-    end
-
-    def cleanup_cover(image_path)
-      CoverResolver.cleanup(image_path)
-    end
-
-    # Retranscribe a final MP3 to generate timestamps for old episodes
-    # that were created before timestamp persistence was added.
-    def retranscribe_for_timestamps(mp3_path, ts_path, base_name)
-      language = @config.transcription_language
-      unless language
-        puts "  ⚠ #{base_name}: no transcription language configured, skipping subtitles" unless @options[:verbosity] == :quiet
-        return
-      end
-
-      engine_code = pick_timestamp_engine
-      unless engine_code
-        puts "  ⚠ #{base_name}: no transcription engine configured, skipping subtitles" unless @options[:verbosity] == :quiet
-        return
-      end
-
-      puts "  transcribing #{base_name} for subtitles (#{engine_code})..." unless @options[:verbosity] == :quiet
-
-      require_relative File.join(File.expand_path("../..", __dir__), "lib", "transcription", "engine_manager")
-      require_relative File.join(File.expand_path("../..", __dir__), "lib", "timestamp_persister")
-
-      manager = Transcription::EngineManager.new(
-        engine_codes: [engine_code],
-        language: language,
-        target_language: @config.target_language
-      )
-      result = manager.transcribe(mp3_path)
-      segments, engine_code = TimestampPersister.extract_segments(result, engine_codes: [engine_code])
-
-      if segments && !segments.empty?
-        TimestampPersister.persist(
-          segments: segments,
-          engine: engine_code,
-          intro_duration: 0.0,
-          output_path: ts_path
-        )
-      else
-        puts "  ⚠ #{base_name}: transcription returned no segments" unless @options[:verbosity] == :quiet
-      end
-    rescue => e
-      # Non-fatal: video uploads proceed without subtitles
-      $stderr.puts "  ⚠ #{base_name}: retranscription failed (#{e.message}), uploading without subtitles"
-    end
-
-    # Pick the best transcription engine for timestamps.
-    # Groq has word-level, ElevenLabs has word-level, OpenAI has segment-level.
-    TIMESTAMP_ENGINE_PRIORITY = %w[groq elab open].freeze
-
-    def pick_timestamp_engine
-      configured = @config.transcription_engines
-      TIMESTAMP_ENGINE_PRIORITY.find { |e| configured.include?(e) } || configured.first
-    end
-
-    def upload_tracker
-      @upload_tracker ||= UploadTracker.for_config(@config)
-    end
-
-    def rclone_available?
-      _out, _err, status = Open3.capture3("rclone", "--version")
-      status.success?
-    rescue Errno::ENOENT
-      false
     end
   end
 end

@@ -22,174 +22,17 @@ class TestPublishCommand < Minitest::Test
     YouTubePublisher.reset_playlist_cache!
   end
 
-  # --- parse_transcript ---
-
-  def test_parse_transcript_with_transcript_section
-    path = write_transcript(<<~MD)
-      # My Episode Title
-
-      Some description text
-
-      ## Transcript
-
-      First paragraph of transcript.
-
-      Second paragraph.
-
-      ## Vocabulary
-
-      Vocab entries here.
-    MD
-
-    cmd = build_command
-    title, description, transcript = cmd.send(:parse_transcript, path)
-
-    assert_equal "My Episode Title", title
-    assert_equal "Some description text", description
-    assert_includes transcript, "First paragraph of transcript."
-    assert_includes transcript, "Second paragraph."
-    refute_includes transcript, "Vocabulary"
-    refute_includes transcript, "Vocab entries"
-  end
-
-  def test_parse_transcript_without_transcript_section
-    path = write_transcript(<<~MD)
-      # Simple Title
-
-      Just body text here.
-    MD
-
-    cmd = build_command
-    title, description, transcript = cmd.send(:parse_transcript, path)
-
-    assert_equal "Simple Title", title
-    assert_nil description
-    assert_includes transcript, "Just body text here."
-  end
-
-  def test_parse_transcript_empty_description
-    path = write_transcript(<<~MD)
-      # Title
-
-      ## Transcript
-
-      Body here.
-    MD
-
-    cmd = build_command
-    title, description, transcript = cmd.send(:parse_transcript, path)
-
-    assert_equal "Title", title
-    assert_nil description
-    assert_includes transcript, "Body here."
-  end
-
-  def test_parse_transcript_minimal
-    path = write_transcript("# Just Title\n")
-
-    cmd = build_command
-    title, description, _ = cmd.send(:parse_transcript, path)
-
-    assert_equal "Just Title", title
-    assert_nil description
-  end
-
-  # scan_episodes was moved out of PublishCommand and into the shared
-  # EpisodeScanner module — see test_episode_scanner.rb for those tests.
-  # End-to-end filter behavior is covered by test_youtube_publisher.rb and
-  # test_lingq_publisher.rb.
-
-  # --- upload_tracker ---
-
-  def test_upload_tracker_missing_file
-    cmd = build_command
-    tracker = cmd.send(:upload_tracker)
-    assert_equal({}, tracker.load)
-  end
-
-  def test_upload_tracker_existing_file
-    tracking_path = File.join(@tmpdir, "uploads.yml")
-    File.write(tracking_path, { "lingq" => { "123" => { "ep-a" => 1 } } }.to_yaml)
-
-    cmd = build_command
-    tracker = cmd.send(:upload_tracker)
-    assert_equal 1, tracker.entries_for(:lingq, "123")["ep-a"]
-  end
-
-  def test_upload_tracker_record_and_persist
-    cmd = build_command
-    tracker = cmd.send(:upload_tracker)
-    tracker.record(:lingq, "456", "ep-b", 2)
-
-    tracking_path = File.join(@tmpdir, "uploads.yml")
-    assert File.exist?(tracking_path)
-    data = YAML.load_file(tracking_path)
-    assert_equal 2, data["lingq"]["456"]["ep-b"]
-  end
-
-  def test_upload_tracker_handles_non_hash
-    tracking_path = File.join(@tmpdir, "uploads.yml")
-    File.write(tracking_path, "just a string")
-
-    cmd = build_command
-    tracker = cmd.send(:upload_tracker)
-    assert_equal({}, tracker.load)
-  end
-
-  # --- cleanup_cover ---
-
-  def test_cleanup_cover_deletes_tmpdir_file
-    cover = File.join(Dir.tmpdir, "podgen_test_cover_#{Process.pid}.jpg")
-    File.write(cover, "image")
-
-    cmd = build_command
-    cmd.send(:cleanup_cover, cover)
-
-    refute File.exist?(cover)
-  end
-
-  def test_cleanup_cover_ignores_non_tmpdir_file
-    # Use a path outside Dir.tmpdir
-    cover = File.join(@episodes_dir, "cover.jpg")
-    File.write(cover, "image")
-
-    # Temporarily override Dir.tmpdir to be something else so this path won't match
-    cmd = build_command
-    # The check is image_path.start_with?(Dir.tmpdir), and @episodes_dir is under
-    # Dir.tmpdir since mktmpdir creates there. Use absolute home dir instead.
-    home_cover = File.expand_path("~/podgen_test_cleanup_cover.jpg")
-    File.write(home_cover, "image")
-    cmd.send(:cleanup_cover, home_cover)
-    assert File.exist?(home_cover)
-  ensure
-    File.delete(home_cover) if home_cover && File.exist?(home_cover)
-  end
-
-  def test_cleanup_cover_ignores_nil
-    cmd = build_command
-    cmd.send(:cleanup_cover, nil) # should not raise
-  end
-
-  # --- reconcile_subtitles_if_needed ---
-
-  def test_reconcile_subtitles_if_needed_loads_timestamp_persister
-    ts_path = File.join(@episodes_dir, "ep-2026-01-15_timestamps.json")
-    File.write(ts_path, JSON.generate({
-      "version" => 1, "engine" => "groq", "intro_duration" => 0.0,
-      "segments" => [{ "start" => 0.0, "end" => 1.0, "text" => "hello" }]
-    }))
-    transcript_path = write_transcript("# Title\n\n## Transcript\n\nHello world.\n")
-
-    cmd = build_command
-    old_key = ENV.delete("ANTHROPIC_API_KEY")
-    begin
-      _, err = capture_io { cmd.send(:reconcile_subtitles_if_needed, ts_path, transcript_path) }
-      refute_match(/uninitialized constant/, err,
-        "TimestampPersister should be loaded before use in reconcile_subtitles_if_needed")
-    ensure
-      ENV["ANTHROPIC_API_KEY"] = old_key if old_key
-    end
-  end
+  # The following per-method behaviors used to live on PublishCommand and
+  # are now in their dedicated classes; their tests moved with them:
+  #   parse_transcript            → test_transcript_parser.rb
+  #   scan_episodes               → test_episode_scanner.rb
+  #   upload_tracker              → test_upload_tracker.rb
+  #   reconcile_subtitles_if_needed → test_subtitle_reconciliation_runner.rb
+  #                                  + test_youtube_publisher.rb integration
+  #   retranscribe_for_timestamps → covered by the publisher tests' setup
+  #   pick_timestamp_engine       → folded into the publishers (private)
+  #   cleanup_cover               → covered by test_cover_resolver.rb
+  #   rclone_available?           → covered by test_r2_publisher.rb
 
   # --- publish_to_youtube: playlist verification ---
 
@@ -323,57 +166,6 @@ class TestPublishCommand < Minitest::Test
     capture_io { cmd.send(:publish_to_youtube) }
 
     assert_empty verified, "should NOT call verify_playlist! when no playlist configured"
-  end
-
-  # --- rclone_available? ---
-
-  def test_rclone_available_when_installed
-    cmd = build_command
-    result = cmd.send(:rclone_available?)
-    # Result depends on environment — just verify it returns boolean
-    assert_includes [true, false], result
-  end
-
-  # --- pick_timestamp_engine ---
-
-  def test_pick_timestamp_engine_prefers_groq
-    cmd = build_command(transcription_engines: %w[open groq elab])
-    assert_equal "groq", cmd.send(:pick_timestamp_engine)
-  end
-
-  def test_pick_timestamp_engine_falls_back_to_elab
-    cmd = build_command(transcription_engines: %w[open elab])
-    assert_equal "elab", cmd.send(:pick_timestamp_engine)
-  end
-
-  def test_pick_timestamp_engine_falls_back_to_open
-    cmd = build_command(transcription_engines: %w[open])
-    assert_equal "open", cmd.send(:pick_timestamp_engine)
-  end
-
-  def test_pick_timestamp_engine_uses_first_when_unknown
-    cmd = build_command(transcription_engines: %w[custom])
-    assert_equal "custom", cmd.send(:pick_timestamp_engine)
-  end
-
-  # --- retranscribe_for_timestamps ---
-
-  def test_retranscribe_skips_when_no_language
-    cmd = build_command(transcription_language: nil)
-    ts_path = File.join(@episodes_dir, "ep_timestamps.json")
-
-    capture_io { cmd.send(:retranscribe_for_timestamps, "/tmp/fake.mp3", ts_path, "ep") }
-
-    refute File.exist?(ts_path)
-  end
-
-  def test_retranscribe_skips_when_no_engines
-    cmd = build_command(transcription_language: "sl", transcription_engines: [])
-    ts_path = File.join(@episodes_dir, "ep_timestamps.json")
-
-    capture_io { cmd.send(:retranscribe_for_timestamps, "/tmp/fake.mp3", ts_path, "ep") }
-
-    refute File.exist?(ts_path)
   end
 
   # --- --date flag ---

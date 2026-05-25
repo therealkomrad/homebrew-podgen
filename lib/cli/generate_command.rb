@@ -430,10 +430,12 @@ module PodgenCLI
       Voicer.new(logger: @logger).voice(
         segments: lang_script[:segments],
         output_path: output_path,
-        voice_id: voice_id,
+        voice_id: voice_id || @config.tts_voice,
         title: lang_script[:title],
         author: @config.author,
         tts_model_id: @config.tts_model_id,
+        tts_engine: @config.tts_engine,
+        tts_base_url: @config.tts_base_url,
         pronunciation_pls_path: @config.pronunciation_pls_path,
         intro_path: intro_path,
         outro_path: outro_path,

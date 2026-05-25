@@ -7,7 +7,7 @@ module Tell
   class Config
     REQUIRED_KEYS = %w[original_language target_language voice_id].freeze
     VALID_TRANSLATION_ENGINES = %w[deepl claude openai].freeze
-    VALID_TTS_ENGINES = %w[elevenlabs google].freeze
+    VALID_TTS_ENGINES = %w[elevenlabs google openai].freeze
     CONFIG_PATH = File.expand_path("~/.tell.yml")
     DEFAULT_TRANSLATION_TIMEOUT = 8.0
 
@@ -39,7 +39,7 @@ module Tell
     attr_reader :original_language, :target_language, :voice_id,
                 :voice_male, :voice_female,
                 :translation_engines, :tts_engine,
-                :tts_model_id, :output_format,
+                :tts_model_id, :tts_base_url, :output_format,
                 :api_key, :tts_api_key, :google_language_code,
                 :reverse_translate, :gloss, :gloss_reverse, :phonetic,
                 :gloss_model, :phonetic_model, :phonetic_system,
@@ -61,6 +61,7 @@ module Tell
       @voice_female       = data["voice_female"]
       @tts_engine         = overrides[:tts_engine] || data.fetch("tts_engine", "elevenlabs")
       @tts_model_id       = data["tts_model_id"] || data.fetch("model_id", "eleven_multilingual_v2")
+      @tts_base_url       = data["tts_base_url"] || ENV["TTS_BASE_URL"]
       @output_format      = data.fetch("output_format", "mp3_44100_128")
       @reverse_translate  = overrides[:reverse] || data.fetch("reverse_translate", false)
       @gloss              = overrides[:gloss] || data.fetch("gloss", false)
@@ -256,6 +257,10 @@ module Tell
         raise "Google TTS requires GOOGLE_API_KEY (set in env or as 'google_api_key' in #{CONFIG_PATH})" unless @tts_api_key
         @google_language_code = data["google_language_code"] || derive_google_language_code
         adapt_google_voice!
+      when "openai"
+        # API key is optional when using a local server (openedai-speech etc.)
+        @tts_api_key = data["openai_api_key"] || ENV.fetch("OPENAI_API_KEY", "local")
+        @api_key     = nil
       end
     end
 

@@ -11,6 +11,7 @@ module Tell
     case engine
     when "elevenlabs" then ElevenlabsTts.new(config)
     when "google"     then GoogleTts.new(config)
+    when "openai"     then OpenaiTts.new(config)
     else raise "Unknown tts_engine: #{engine}"
     end
   end
@@ -124,5 +125,52 @@ module Tell
       end
     end
 
+  end
+
+  # OpenAI-compatible TTS — works with OpenAI cloud (tts-1/tts-1-hd) and
+  # any local server that mirrors the /v1/audio/speech endpoint, such as
+  # openedai-speech (Piper / Kokoro-82M) for zero-cost local generation.
+  class OpenaiTts
+    include HttpRetryable
+
+    DEFAULT_BASE_URL = "https://api.openai.com/v1"
+    MAX_RETRIES = 2
+
+    def initialize(config)
+      @api_key  = config.tts_api_key || "local"
+      @base_url = config.tts_base_url || DEFAULT_BASE_URL
+      @model    = config.tts_model_id || "tts-1"
+      @voice    = config.voice_id     || "onyx"
+    end
+
+    def synthesize(text, voice: nil)
+      body = {
+        model:           @model,
+        input:           text,
+        voice:           voice || @voice,
+        response_format: "mp3"
+      }
+
+      with_http_retries("OpenAI TTS", max: MAX_RETRIES) do
+        response = HTTParty.post(
+          "#{@base_url}/audio/speech",
+          headers: {
+            "Authorization" => "Bearer #{@api_key}",
+            "Content-Type"  => "application/json"
+          },
+          body: body.to_json,
+          timeout: 60
+        )
+
+        case response.code
+        when 200
+          response.body
+        when *RETRIABLE_CODES
+          raise RetriableError, "HTTP #{response.code}: #{parse_error(response)}"
+        else
+          raise "OpenAI TTS failed: HTTP #{response.code}: #{response.body.to_s[0, 200]}"
+        end
+      end
+    end
   end
 end

@@ -23,7 +23,8 @@ class Voicer
   # segments: [{ name:, text: }, ...] — output by ScriptAgent / TranslationAgent
   # Returns the output_path on success; raises on failure.
   def voice(segments:, output_path:, voice_id:, title:, author:,
-            tts_model_id: nil, pronunciation_pls_path: nil,
+            tts_model_id: nil, tts_engine: nil, tts_base_url: nil,
+            pronunciation_pls_path: nil,
             intro_path: nil, outro_path: nil,
             segment_pause: DEFAULT_SEGMENT_PAUSE,
             lang_code: nil)
@@ -34,6 +35,8 @@ class Voicer
       logger: @logger,
       voice_id_override: voice_id,
       model_id_override: tts_model_id,
+      engine_override: tts_engine,
+      base_url_override: tts_base_url,
       pronunciation_pls_path: pronunciation_pls_path
     )
     audio_paths = tts_agent.synthesize(segments)

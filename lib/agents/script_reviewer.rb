@@ -326,7 +326,7 @@ class ScriptReviewer
   def run_ai_review(script)
     log("Running AI review with #{@model}")
 
-    with_retries(max: 2, on: [Anthropic::Errors::APIError, StructuredOutputError]) do
+    with_retries(max: 2, on: [Anthropic::Errors::APIError, StructuredOutputError, RuntimeError]) do
       message, elapsed = measure_time do
         @client.messages.create(
           model: @model,

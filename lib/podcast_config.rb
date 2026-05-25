@@ -129,13 +129,37 @@ class PodcastConfig
     @max_length_seconds = parse_length(parser.sources["max_length"])
   end
 
-  # Per-podcast ElevenLabs TTS model override. Reads `tts_model:` from the
-  # ## Audio section. Returns nil when not set (callers fall back to ENV
-  # ELEVENLABS_MODEL_ID, then to TTSAgent::DEFAULT_MODEL_ID).
+  # Per-podcast TTS model override. Reads `tts_model:` from ## Audio.
+  # Returns nil when not set (callers fall back to ENV or TTSAgent defaults).
   def tts_model_id
     return @tts_model_id if defined?(@tts_model_id)
     raw = parser.audio_section[:tts_model]
     @tts_model_id = raw.is_a?(String) && !raw.strip.empty? ? raw.strip : nil
+  end
+
+  # TTS engine override. Reads `tts_engine:` from ## Audio.
+  # Values: "elevenlabs" (default), "openai" (also covers openedai-speech / Piper via local URL).
+  def tts_engine
+    return @tts_engine if defined?(@tts_engine)
+    raw = parser.audio_section[:tts_engine]
+    @tts_engine = raw.is_a?(String) && !raw.strip.empty? ? raw.strip : nil
+  end
+
+  # Per-podcast TTS voice override. Reads `tts_voice:` from ## Audio.
+  # For OpenAI: alloy/echo/fable/onyx/nova/shimmer. For ElevenLabs: voice UUID.
+  def tts_voice
+    return @tts_voice if defined?(@tts_voice)
+    raw = parser.audio_section[:tts_voice]
+    @tts_voice = raw.is_a?(String) && !raw.strip.empty? ? raw.strip : nil
+  end
+
+  # Base URL for OpenAI-compatible TTS. Reads `tts_base_url:` from ## Audio.
+  # Defaults to OpenAI cloud when nil. Set to e.g. "http://localhost:8000/v1"
+  # for openedai-speech (free, local Piper/Kokoro-82M).
+  def tts_base_url
+    return @tts_base_url if defined?(@tts_base_url)
+    raw = parser.audio_section[:tts_base_url]
+    @tts_base_url = raw.is_a?(String) && !raw.strip.empty? ? raw.strip : nil
   end
 
   def auto_cover_config

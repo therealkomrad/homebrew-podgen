@@ -4,15 +4,32 @@ require "anthropic"
 
 class StructuredOutputError < StandardError; end
 
-# Shared Anthropic API client initialization.
-# Include in classes that call Claude API and call init_anthropic_client
+# Shared LLM client initialization.
+# Include in classes that call the LLM and call init_anthropic_client
 # in initialize to set @client and @model.
+#
+# Supports two engines via the LLM_ENGINE environment variable:
+#   LLM_ENGINE=anthropic (default) — Anthropic Claude via the official SDK
+#   LLM_ENGINE=ollama               — Any Ollama-compatible local server (free)
+#
+# Ollama env vars:
+#   OLLAMA_BASE_URL  (default: http://localhost:11434/v1)
+#   OLLAMA_MODEL     (default: llama3.1:8b — use qwen2.5:7b for best JSON compliance)
 module AnthropicClient
   private
 
   def init_anthropic_client(env_key: "CLAUDE_MODEL", default_model: "claude-opus-4-7")
-    @client = Anthropic::Client.new
-    @model = ENV.fetch(env_key, default_model)
+    if ENV["LLM_ENGINE"] == "ollama"
+      require_relative "ollama_client"
+      @client = OllamaClientWrapper.new(
+        base_url: ENV.fetch("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
+        api_key:  ENV.fetch("OLLAMA_API_KEY", "local")
+      )
+      @model = ENV.fetch("OLLAMA_MODEL", "llama3.1:8b")
+    else
+      @client = Anthropic::Client.new
+      @model = ENV.fetch(env_key, default_model)
+    end
   end
 
   # Extract and validate structured output from an API response.

@@ -20,8 +20,12 @@ class TTSAgent
   include Retryable
   include HttpRetryable
 
-  BASE_URL = "https://api.elevenlabs.io/v1/text-to-speech"
+  ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1/text-to-speech"
+  # Backwards-compat alias used in tests / external callers.
+  BASE_URL = ELEVENLABS_BASE_URL
   DICT_API_URL = "https://api.elevenlabs.io/v1/pronunciation-dictionaries"
+  OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
+  OPENAI_MAX_CHARS = 4_096
   TRIM_THRESHOLD = 0.5 # seconds of trailing audio before we trim
   # Upper bound on trim. ElevenLabs eleven_v3 sometimes returns
   # character_end_times_seconds that under-reports the real speech end by
@@ -56,14 +60,27 @@ class TTSAgent
   # Backwards-compat alias for callers/tests that referenced the constant.
   MAX_CHARS = DEFAULT_MAX_CHARS
 
-  def initialize(logger: nil, voice_id_override: nil, model_id_override: nil, pronunciation_pls_path: nil)
+  def initialize(logger: nil, voice_id_override: nil, model_id_override: nil,
+                 engine_override: nil, base_url_override: nil,
+                 pronunciation_pls_path: nil)
     @logger = logger
-    @api_key = ENV.fetch("ELEVENLABS_API_KEY") { raise "ELEVENLABS_API_KEY environment variable is not set" }
-    @voice_id = voice_id_override || ENV.fetch("ELEVENLABS_VOICE_ID") { raise "ELEVENLABS_VOICE_ID environment variable is not set" }
-    @model_id = model_id_override || ENV.fetch("ELEVENLABS_MODEL_ID", DEFAULT_MODEL_ID)
-    @output_format = ENV.fetch("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128")
-    @pronunciation_locators = resolve_pronunciation_dictionary(pronunciation_pls_path)
-    @splitter = TextSplitter.new(max_chars: max_chars_for_model(@model_id))
+    @engine = (engine_override || ENV.fetch("TTS_ENGINE", "elevenlabs")).to_s
+
+    if @engine == "openai"
+      @api_key   = ENV.fetch("OPENAI_API_KEY", "local")
+      @base_url  = base_url_override || ENV.fetch("TTS_BASE_URL", OPENAI_DEFAULT_BASE_URL)
+      @voice_id  = voice_id_override || ENV.fetch("OPENAI_TTS_VOICE", "onyx")
+      @model_id  = model_id_override || ENV.fetch("OPENAI_TTS_MODEL", "tts-1")
+      @splitter  = TextSplitter.new(max_chars: OPENAI_MAX_CHARS)
+      @pronunciation_locators = []
+    else
+      @api_key = ENV.fetch("ELEVENLABS_API_KEY") { raise "ELEVENLABS_API_KEY environment variable is not set" }
+      @voice_id = voice_id_override || ENV.fetch("ELEVENLABS_VOICE_ID") { raise "ELEVENLABS_VOICE_ID environment variable is not set" }
+      @model_id = model_id_override || ENV.fetch("ELEVENLABS_MODEL_ID", DEFAULT_MODEL_ID)
+      @output_format = ENV.fetch("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128")
+      @pronunciation_locators = resolve_pronunciation_dictionary(pronunciation_pls_path)
+      @splitter = TextSplitter.new(max_chars: max_chars_for_model(@model_id))
+    end
   end
 
   private
@@ -77,6 +94,8 @@ class TTSAgent
   # Input: array of { name:, text: } segment hashes
   # Output: ordered array of file paths to MP3 files
   def synthesize(segments)
+    return synthesize_openai(segments) if @engine == "openai"
+
     audio_paths = []
     previous_request_ids = []
     log("Model: #{@model_id}, voice: #{@voice_id} (max #{max_chars_for_model(@model_id)} chars/chunk)")
@@ -111,6 +130,56 @@ class TTSAgent
   end
 
   private
+
+  def synthesize_openai(segments)
+    log("OpenAI-compatible TTS: #{@base_url}, model: #{@model_id}, voice: #{@voice_id} (max #{OPENAI_MAX_CHARS} chars/chunk)")
+    audio_paths = []
+
+    segments.each_with_index do |segment, idx|
+      log("Synthesizing segment #{idx + 1}/#{segments.length}: #{segment[:name]} (#{segment[:text].length} chars)")
+      start = Time.now
+
+      chunks = @splitter.split(segment[:text])
+      chunks.each_with_index do |chunk, chunk_idx|
+        log("  Chunk #{chunk_idx + 1}/#{chunks.length} (#{chunk.length} chars)") if chunks.length > 1
+        path = File.join(Dir.tmpdir, "podgen_#{idx}_#{chunk_idx}_#{Process.pid}.mp3")
+        synthesize_openai_chunk(text: chunk, path: path)
+        audio_paths << path
+        log("  Saved #{File.size(path)} bytes → #{path}")
+      end
+
+      elapsed = (Time.now - start).round(2)
+      log("  Done in #{elapsed}s")
+    end
+
+    audio_paths
+  end
+
+  def synthesize_openai_chunk(text:, path:)
+    url = "#{@base_url}/audio/speech"
+    body = { model: @model_id, input: text, voice: @voice_id, response_format: "mp3" }
+
+    with_retries(max: MAX_RETRIES, on: HTTP_EXCEPTIONS) do
+      response = HTTParty.post(
+        url,
+        headers: {
+          "Authorization" => "Bearer #{@api_key}",
+          "Content-Type"  => "application/json"
+        },
+        body: body.to_json,
+        timeout: 120
+      )
+
+      case response.code
+      when 200
+        File.binwrite(path, response.body)
+      when *RETRIABLE_CODES
+        raise RetriableError, "HTTP #{response.code}: #{parse_error(response)}"
+      else
+        raise "OpenAI TTS failed: HTTP #{response.code}: #{response.body.to_s[0, 200]}"
+      end
+    end
+  end
 
   def synthesize_chunk(text:, path:, previous_request_ids: [])
     url = "#{BASE_URL}/#{@voice_id}/with-timestamps?output_format=#{@output_format}"

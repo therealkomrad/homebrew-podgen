@@ -51,7 +51,7 @@ class ScriptAgent
     log("Generating script with #{@model}")
     research_text = format_research(research_data)
 
-    with_retries(max: MAX_RETRIES, on: [Anthropic::Errors::APIError, StructuredOutputError]) do
+    with_retries(max: MAX_RETRIES, on: [Anthropic::Errors::APIError, StructuredOutputError, RuntimeError]) do
       message, elapsed = measure_time do
         @client.messages.create(
           model: @model,

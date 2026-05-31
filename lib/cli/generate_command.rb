@@ -68,6 +68,7 @@ module PodgenCLI
       return code if code
 
       begin
+        start_ollama_if_needed
         @logger.log("Podcast Agent started for '#{@podcast_name}'#{@dry_run ? ' (DRY RUN)' : ''}")
         @pipeline_start = Time.now
 
@@ -108,12 +109,45 @@ module PodgenCLI
         $stderr.puts "\n\u2717 Pipeline failed: #{e.message}" unless @options[:verbosity] == :quiet
         1
       ensure
+        stop_ollama_if_started
         @lock_file.flock(File::LOCK_UN)
         @lock_file.close
       end
     end
 
     private
+
+    def start_ollama_if_needed
+      return unless ENV["LLM_ENGINE"] == "ollama"
+      return if ollama_responding?
+
+      @logger.log("Starting Ollama...")
+      @ollama_pid = Process.spawn("ollama serve", [:out, :err] => "/dev/null")
+      Process.detach(@ollama_pid)
+
+      deadline = Time.now + 30
+      sleep 0.5 until ollama_responding? || Time.now > deadline
+      raise "Ollama did not start within 30 seconds" unless ollama_responding?
+
+      @logger.log("Ollama ready (pid #{@ollama_pid})")
+    end
+
+    def stop_ollama_if_started
+      return unless @ollama_pid
+      @logger.log("Stopping Ollama (pid #{@ollama_pid})...")
+      Process.kill("TERM", @ollama_pid) rescue nil
+      @ollama_pid = nil
+    end
+
+    def ollama_responding?
+      require "net/http"
+      base = ENV.fetch("OLLAMA_BASE_URL", "http://localhost:11434")
+      uri = URI("#{base}/api/tags")
+      Net::HTTP.get_response(uri)
+      true
+    rescue
+      false
+    end
 
     # Returns exit code on failure, nil on success.
     def setup_pipeline

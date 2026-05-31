@@ -10,7 +10,9 @@ class ResearchAgent
   include Retryable
 
   MAX_RETRIES = 3
-  RESULTS_PER_TOPIC = 5
+  # Exa returns dense, summarized findings — the richest material for the script. Tunable
+  # via EXA_RESULTS_PER_TOPIC (default 5) to feed the script writer more specifics.
+  RESULTS_PER_TOPIC = (ENV["EXA_RESULTS_PER_TOPIC"].to_i if ENV["EXA_RESULTS_PER_TOPIC"].to_i > 0) || 5
 
   def initialize(results_per_topic: RESULTS_PER_TOPIC, exclude_urls: Set.new, category: "news", logger: nil)
     @results_per_topic = results_per_topic

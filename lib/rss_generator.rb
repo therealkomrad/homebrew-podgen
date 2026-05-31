@@ -152,6 +152,17 @@ class RssGenerator
 
       add_text(item, "guid", ep[:filename])
 
+      # Show notes: a short plain-text description (the opening rundown) for cards/basic
+      # apps, plus the full transcript HTML — which includes the per-segment "Sources"
+      # citation lists — as content:encoded for rich podcast clients.
+      notes = build_show_notes(ep[:filename])
+      if notes
+        add_text(item, "description", notes[:summary]) unless notes[:summary].empty?
+        unless notes[:html].empty?
+          item.add_element("content:encoded").add(REXML::CData.new(notes[:html]))
+        end
+      end
+
       # Add transcript link if HTML version exists (transcript or script)
       if @base_url
         ep_base = File.basename(ep[:filename], ".mp3")
@@ -172,6 +183,33 @@ class RssGenerator
 
   def strip_markdown_links(text)
     text.gsub(/\[([^\]]+)\]\([^)]+\)/, '\1')
+  end
+
+  # Builds show notes from an episode's transcript markdown.
+  # Returns { summary:, html: } — summary is the first content paragraph (the opening
+  # rundown) with markdown stripped; html is the full transcript rendered to HTML, which
+  # includes the per-segment "Sources" citation lists.
+  def build_show_notes(filename)
+    ep_base = File.basename(filename, ".mp3")
+    md_path = %w[_transcript.md _script.md]
+      .map { |s| File.join(@episodes_dir, ep_base + s) }
+      .find { |p| File.exist?(p) }
+    return nil unless md_path
+
+    md = File.read(md_path)
+    body = md.sub(/\A#[^\n]*\n+/, "") # drop the leading "# Title" line
+    html = begin
+      render_body_html(body, vocab: false).to_s
+    rescue => e
+      @logger&.log("Show-notes HTML render failed for #{filename}: #{e.message}")
+      ""
+    end
+    paras = body.split(/\n{2,}/).map(&:strip).reject { |p| p.empty? || p.start_with?("#", "- ") }
+    summary = strip_markdown_links(paras.first.to_s).gsub(/\s+/, " ").strip[0, 500].to_s
+    { summary: summary, html: html }
+  rescue => e
+    @logger&.log("Show-notes build failed for #{filename}: #{e.message}")
+    nil
   end
 
   def extract_title_from_episode(filename)

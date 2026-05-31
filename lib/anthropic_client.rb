@@ -18,14 +18,27 @@ class StructuredOutputError < StandardError; end
 module AnthropicClient
   private
 
-  def init_anthropic_client(env_key: "CLAUDE_MODEL", default_model: "claude-opus-4-7")
+  # ollama_model_env: optional env var name for a per-agent Ollama model override
+  # (e.g. "OLLAMA_SCRIPT_MODEL"). Falls back to OLLAMA_MODEL when unset/empty, so a
+  # heavier model can be used for script writing while topics/review stay lightweight.
+  def init_anthropic_client(env_key: "CLAUDE_MODEL", default_model: "claude-opus-4-7", ollama_model_env: nil)
     if ENV["LLM_ENGINE"] == "ollama"
       require_relative "ollama_client"
       @client = OllamaClientWrapper.new(
-        base_url: ENV.fetch("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
+        base_url: ENV.fetch("OLLAMA_BASE_URL", "http://localhost:11434"),
         api_key:  ENV.fetch("OLLAMA_API_KEY", "local")
       )
-      @model = ENV.fetch("OLLAMA_MODEL", "llama3.1:8b")
+      override = ollama_model_env && ENV[ollama_model_env]
+      override = nil if override == ""
+      @model = override || ENV.fetch("OLLAMA_MODEL", "llama3.1:8b")
+    elsif ENV["LLM_ENGINE"] == "openai"
+      # Any OpenAI-compatible /chat/completions endpoint (Gemini free tier, Groq, Cerebras…).
+      require_relative "openai_compat_client"
+      @client = OpenAICompatClientWrapper.new(
+        base_url: ENV.fetch("OPENAI_COMPAT_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"),
+        api_key:  ENV.fetch("OPENAI_COMPAT_API_KEY") { ENV.fetch("OPENAI_API_KEY", "") }
+      )
+      @model = ENV.fetch("LLM_MODEL", "gemini-2.5-flash")
     else
       @client = Anthropic::Client.new
       @model = ENV.fetch(env_key, default_model)

@@ -325,7 +325,9 @@ module PodgenCLI
       script
     end
 
-    MAX_REVIEW_RETRIES = 2
+    # Each review-triggered regeneration is a full extra LLM call. On metered/free-tier
+    # APIs (e.g. Gemini's 20 req/day) keep this low. Override with PODGEN_REVIEW_RETRIES.
+    MAX_REVIEW_RETRIES = (ENV["PODGEN_REVIEW_RETRIES"] || "2").to_i
 
     def review_script(script, research_data, priority_urls)
       @logger.phase_start("Review")

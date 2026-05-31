@@ -70,7 +70,7 @@ class ScriptAgent
       message, elapsed = measure_time do
         @client.messages.create(
           model: @model,
-          max_tokens: 16384,
+          max_tokens: 24576,
           system: build_system_prompt,
           messages: [
             {
@@ -325,6 +325,10 @@ class ScriptAgent
       explicitly present in the findings. Do NOT infer, calculate, estimate, or invent details
       that aren't stated (e.g. don't derive an age from a year). Attribute every claim, quote, and
       result exactly as the findings do — credit every party the findings name.
+      Mention ONLY the companies, products, models, people, and figures that actually appear in
+      the research findings. Do NOT add any entity, product name, or statistic from your own prior
+      knowledge — even if you believe it is real. If the findings don't name it, it does not exist
+      for this script. Match the findings' exact wording on status (e.g. "in preview" vs "launched").
 
       In the sources field, list every article or source you actually referenced in the
       script. Each source needs a short descriptive title (5-8 words max, like a headline)

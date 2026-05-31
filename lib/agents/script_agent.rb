@@ -299,9 +299,9 @@ class ScriptAgent
       You are an expert podcast scriptwriter.
       Generate a complete podcast script following the provided guidelines exactly.
 
-      Give the episode a specific, headline-style `title` that names the day's two biggest
-      stories (e.g. "Bitcoin Bleeds Billions, Illinois Passes AI Audit Law") — NOT the generic
-      show name and NOT just one topic.
+      Give the episode a short, snappy `title` — a punchy headline of 3 to 6 words, at most
+      about 45 characters, that captures the day's single biggest theme (e.g. "Miners Pivot to
+      AI" or "The Great Model Squeeze"). NOT the generic show name, and NOT a list of stories.
 
       Each segment must have a short descriptive name that reflects its content
       (e.g. "Opening", "Bitcoin ETF Surge", "Rails 8 Authentication", "Wrap-Up").

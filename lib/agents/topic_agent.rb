@@ -63,7 +63,8 @@ class TopicAgent
   private
 
   def build_user_prompt(today)
-    prompt = "Today's date is #{today}. Generate 4 specific, timely search queries for this podcast episode."
+    count = ENV.fetch("PODGEN_TOPICS_PER_EPISODE", "4").to_i
+    prompt = "Today's date is #{today}. Generate #{count} specific, timely search queries for this podcast episode."
     if @recent_topics && !@recent_topics.empty?
       prompt += "\n\nIMPORTANT: The following topics were already covered in recent episodes.\n" \
                 "Generate queries about DIFFERENT subjects — do not repeat these:\n" \
@@ -78,7 +79,7 @@ class TopicAgent
         type: "text",
         text: <<~PROMPT
           You are a podcast producer generating search queries for today's episode.
-          Based on the podcast guidelines below and today's date, generate exactly 4
+          Based on the podcast guidelines below and today's date, generate exactly #{ENV.fetch("PODGEN_TOPICS_PER_EPISODE", "4").to_i}
           specific, timely search queries that would find the most interesting recent
           news for each topic area defined in the guidelines.
 

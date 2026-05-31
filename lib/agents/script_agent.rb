@@ -248,8 +248,8 @@ class ScriptAgent
       every party the findings credit, and don't imply causation or contrast the findings don't state.
 
       Write as spoken word: the exact words the host will say. No stage directions, no markdown,
-      no bullet points, no host name, no sign-off. Use numeric digits for numbers ($67,500, 22%,
-      1.5 trillion). Short declarative sentences mixed with longer analytical ones. Confident,
+      no bullet points, no host name, no sign-off. Use numeric digits for numbers (88%, 10x,
+      1.4 billion parameters). Short declarative sentences mixed with longer analytical ones. Confident,
       slightly opinionated point of view — use reframing ("The interesting part isn't X, it's Y").
 
       FORMAT: First output one line "TITLE: <a short, specific headline naming the lead story>"
@@ -269,10 +269,12 @@ class ScriptAgent
         You are writing the COLD OPEN of a daily research briefing podcast. Today is #{today}.
 
         In 5-7 punchy sentences, rattle off the single biggest concrete development from EACH
-        segment listed by the user — always name the company or asset and the hard number
-        (e.g. "Bitcoin is pinned below $74,000 with spot ETFs bleeding for a record nine straight
-        days, $2.8 billion gone"). Open with "Here's what's moving." energy and end with a short
-        call to action like "Let's get into it." Spoken word only, numeric digits, no markdown.
+        segment listed by the user — always name the model, method, dataset, paper, company, or
+        asset and the hard number (e.g. "A new open model tops the reasoning benchmark at 88%,
+        but the real story is the 10x drop in inference cost"). Open with the exact cold-open
+        line specified in the guidelines (if none is given, a short "here's what's worth knowing"
+        rundown line), and end with a short call to action like "Let's get into it." Spoken word
+        only, numeric digits, no markdown.
 
         FORMAT: First output one line "TITLE: <a specific, headline-style episode title naming the
         day's biggest theme>". Then a blank line, then the cold open prose. Nothing after it.
@@ -300,22 +302,23 @@ class ScriptAgent
       Generate a complete podcast script following the provided guidelines exactly.
 
       Give the episode a short, snappy `title` — a punchy headline of 3 to 6 words, at most
-      about 45 characters, that captures the day's single biggest theme (e.g. "Miners Pivot to
-      AI" or "The Great Model Squeeze"). NOT the generic show name, and NOT a list of stories.
+      about 45 characters, that captures the day's single biggest theme (e.g. "Sparse Models
+      Win" or "The Great Model Squeeze"). NOT the generic show name, and NOT a list of stories.
 
       Each segment must have a short descriptive name that reflects its content
-      (e.g. "Opening", "Bitcoin ETF Surge", "Rails 8 Authentication", "Wrap-Up").
+      (e.g. "Opening", "Sparse Attention Gains", "Causal Inference at Scale", "Wrap-Up").
       These names are internal labels, not read aloud — they serve as section titles.
       Do NOT use generic names like "intro", "segment_1", or "outro".
 
       Write naturally as spoken word — no stage directions, no timestamps, no markdown.
       Each segment's text should be the exact words the host will speak aloud.
       Do not invent a host name, persona, or sign-off identity. There is no named host.
-      Use numeric digits for numbers, prices, percentages, and quantities ($67,500, 10 GW,
-      22%, 1,031 BTC). TTS handles digits correctly — do NOT spell them out as words.
+      Use numeric digits for numbers, percentages, and quantities (88%, 10x, 1.4 billion
+      parameters, 3.2 seconds). TTS handles digits correctly — do NOT spell them out as words.
 
-      STRUCTURE: Open with a short "rundown" segment ("Here's what's moving…" — name each story's
-      single biggest number, then "Let's get into it."), then ONE deep ~300-word analytical
+      STRUCTURE: Open with a short "rundown" cold-open segment (use the exact opening line from
+      the guidelines — name each story's single biggest number, then a short call to action like
+      "Let's get into it."), then ONE deep ~300-word analytical
       segment per topic area (lead with the specific numbers, then the analysis — what it means,
       who wins or loses, the catch — then a short "what to watch"), then a brief closing-thought
       segment with one sharp, specific prediction (no recap, no "stay tuned"). TOTAL spoken text

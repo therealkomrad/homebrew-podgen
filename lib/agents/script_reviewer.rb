@@ -78,7 +78,7 @@ class ScriptReviewer
     @priority_urls = Array(priority_urls)
     @guidelines = guidelines
     @logger = logger
-    init_anthropic_client(env_key: "CLAUDE_REVIEWER_MODEL")
+    init_anthropic_client(env_key: "CLAUDE_REVIEWER_MODEL", ollama_model_env: "OLLAMA_REVIEW_MODEL")
   end
 
   # Main entry point.
@@ -91,12 +91,18 @@ class ScriptReviewer
     corrected, det_issues = run_deterministic_checks(corrected)
     all_issues.concat(det_issues)
 
-    # Layer 2: AI review
-    begin
-      ai_issues = run_ai_review(corrected)
-      all_issues.concat(ai_issues)
-    rescue => e
-      log("AI review failed: #{e.message} (proceeding with deterministic checks only)")
+    # Layer 2: AI review (opt-out via PODGEN_SKIP_AI_REVIEW=true). On local models the
+    # AI reviewer is unreliable and a false-positive BLOCKER regenerates the entire script
+    # — very expensive with a heavy script model. Deterministic checks (Layer 1) still run.
+    if ENV["PODGEN_SKIP_AI_REVIEW"] == "true"
+      log("AI review skipped (PODGEN_SKIP_AI_REVIEW=true); deterministic checks only")
+    else
+      begin
+        ai_issues = run_ai_review(corrected)
+        all_issues.concat(ai_issues)
+      rescue => e
+        log("AI review failed: #{e.message} (proceeding with deterministic checks only)")
+      end
     end
 
     unfixed_blockers = all_issues.select { |i| i[:severity] == BLOCKER && !i[:auto_fixed] }

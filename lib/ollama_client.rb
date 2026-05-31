@@ -3,9 +3,10 @@
 require "httparty"
 require "json"
 
-# Interface-compatible replacement for Anthropic::Client backed by any
-# Ollama-compatible API (Ollama, LM Studio, etc.).
+# Interface-compatible replacement for Anthropic::Client backed by Ollama.
 # Activated when LLM_ENGINE=ollama is set in the environment.
+# Uses Ollama's native /api/chat endpoint with JSON Schema structured output,
+# which constrains token sampling so field names are enforced at the model level.
 #
 # OllamaClientWrapper.new(base_url:, api_key:)
 #   .messages
@@ -13,7 +14,7 @@ require "json"
 #     → OllamaMessageResponse
 class OllamaClientWrapper
   def initialize(base_url:, api_key: "local")
-    @messages = OllamaMessagesInterface.new(base_url: base_url, api_key: api_key)
+    @messages = OllamaMessagesInterface.new(base_url: base_url)
   end
 
   def messages
@@ -22,55 +23,150 @@ class OllamaClientWrapper
 end
 
 class OllamaMessagesInterface
-  # Appended to the system prompt when output_config requests structured output.
-  # Keyed by class name string to avoid circular dependencies with agent files.
-  JSON_SCHEMA_HINTS = {
-    "PodcastScript" => <<~HINT,
-      IMPORTANT: Respond with ONLY a valid JSON object — no markdown code blocks, no explanation, nothing outside the JSON.
-      Required structure:
-      {"title":"episode title","segments":[{"name":"segment name","text":"spoken text","sources":[{"title":"source title","url":"https://..."}]}],"sources":[{"title":"source title","url":"https://..."}]}
-      The "sources" array inside each segment is optional — include it only when that segment directly references specific articles.
-    HINT
-    "TopicList" => <<~HINT,
-      IMPORTANT: Respond with ONLY a valid JSON object — no markdown, no explanation.
-      Required structure: {"queries":[{"query":"search query 1"},{"query":"search query 2"},{"query":"search query 3"},{"query":"search query 4"}]}
-    HINT
-    "ScriptReview" => <<~HINT
-      IMPORTANT: Respond with ONLY a valid JSON object — no markdown, no explanation.
-      Required structure: {"issues":[{"severity":"BLOCKER","check":"check name","segment":"segment name","message":"description"}],"overall_assessment":"summary"}
-      severity must be one of: BLOCKER, WARNING, NIT. If there are no issues, return {"issues":[],"overall_assessment":"Script looks good."}.
-    HINT
+  # JSON Schemas passed to Ollama's `format` parameter.
+  # Ollama constrains token sampling to match the schema — field names are enforced
+  # at the model level, not just in the prompt.
+  JSON_SCHEMAS = {
+    "PodcastScript" => {
+      type: "object",
+      required: ["title", "segments", "sources"],
+      properties: {
+        title: { type: "string" },
+        segments: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["name", "text", "sources"],
+            properties: {
+              name:    { type: "string" },
+              text:    { type: "string" },
+              sources: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: ["title", "url"],
+                  properties: {
+                    title: { type: "string" },
+                    url:   { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        sources: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["title", "url"],
+            properties: {
+              title: { type: "string" },
+              url:   { type: "string" }
+            }
+          }
+        }
+      }
+    }.freeze,
+    # One podcast segment — used by ScriptAgent's per-segment generation mode, which
+    # writes each segment in its own focused LLM call for greater depth and length.
+    "Segment" => {
+      type: "object",
+      required: ["name", "text", "sources"],
+      properties: {
+        name:    { type: "string" },
+        text:    { type: "string" },
+        sources: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["title", "url"],
+            properties: {
+              title: { type: "string" },
+              url:   { type: "string" }
+            }
+          }
+        }
+      }
+    }.freeze,
+    "TopicList" => {
+      type: "object",
+      required: ["queries"],
+      properties: {
+        queries: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["query"],
+            properties: {
+              query: { type: "string" }
+            }
+          }
+        }
+      }
+    }.freeze,
+    "ScriptReview" => {
+      type: "object",
+      required: ["issues", "overall_assessment"],
+      properties: {
+        issues: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["severity", "check", "segment", "message"],
+            properties: {
+              severity: { type: "string", enum: ["BLOCKER", "WARNING", "NIT"] },
+              check:    { type: "string" },
+              segment:  { type: "string" },
+              message:  { type: "string" }
+            }
+          }
+        },
+        overall_assessment: { type: "string" }
+      }
+    }.freeze
   }.freeze
 
-  def initialize(base_url:, api_key:)
+  def initialize(base_url:)
     @base_url = base_url.chomp("/")
-    @api_key  = api_key
   end
 
   # Mirrors Anthropic::Client#messages.create — agents call this directly.
-  # The output_config parameter is intercepted and converted to a JSON schema hint.
+  # output_config[:format].name is used to look up the JSON Schema for structured output.
   def create(model:, max_tokens:, system: nil, messages: [], output_config: nil, **_ignored)
     system_text = normalize_system(system)
-    system_text = append_schema_hint(system_text, output_config)
+    schema      = output_config && JSON_SCHEMAS[output_config[:format].name]
 
-    openai_messages = build_messages(system_text, messages)
+    ollama_messages = build_messages(system_text, messages)
 
+    ctx_size    = ENV.fetch("OLLAMA_CTX_SIZE", "8192").to_i
+    # Ignore max_tokens from agents for Ollama — those values were sized for cloud APIs.
+    # Cap the output budget at OLLAMA_NUM_PREDICT. Reasoning is disabled below, so this
+    # budget goes entirely to the JSON answer rather than hidden thinking tokens.
+    num_predict = [max_tokens, ENV.fetch("OLLAMA_NUM_PREDICT", "3000").to_i].min
     body = {
-      model:      model,
-      messages:   openai_messages,
-      max_tokens: max_tokens,
-      stream:     false
+      model:    model,
+      messages: ollama_messages,
+      stream:   false,
+      options:  { num_predict: num_predict, num_ctx: ctx_size }
     }
-    body[:response_format] = { type: "json_object" } if output_config
+
+    # Disable reasoning/thinking for thinking models (e.g. qwen3.x). Otherwise the model
+    # spends its entire num_predict budget on hidden reasoning tokens and returns empty
+    # content, which fails JSON parsing (StructuredOutputError → retry loop). Ollama
+    # ignores this flag on non-thinking models. Set OLLAMA_THINK=true to re-enable.
+    body[:think] = false unless ENV["OLLAMA_THINK"] == "true"
+
+    # Send the JSON Schema itself (Ollama structured outputs) — not the generic
+    # format:"json" flag. Constrained decoding forces the model to emit an object that
+    # matches the schema; weaker local models otherwise return markdown prose for complex
+    # asks (e.g. script generation), failing JSON parsing.
+    body[:format] = schema if schema
 
     response = HTTParty.post(
-      "#{@base_url}/chat/completions",
-      headers: {
-        "Authorization" => "Bearer #{@api_key}",
-        "Content-Type"  => "application/json"
-      },
+      "#{@base_url}/api/chat",
+      headers: { "Content-Type" => "application/json" },
       body:    body.to_json,
-      timeout: 600
+      timeout: 3600
     )
 
     unless response.code == 200
@@ -78,8 +174,8 @@ class OllamaMessagesInterface
     end
 
     data       = JSON.parse(response.body)
-    text       = data.dig("choices", 0, "message", "content") || ""
-    usage_data = data["usage"] || {}
+    text       = data.dig("message", "content") || ""
+    usage_data = data
 
     OllamaMessageResponse.new(text: text, usage_data: usage_data)
   rescue JSON::ParserError => e
@@ -89,22 +185,13 @@ class OllamaMessagesInterface
   private
 
   # Anthropic supports Array-of-blocks system prompts (for cache_control).
-  # Flatten those to a plain string for OpenAI-compatible APIs.
+  # Flatten those to a plain string for Ollama.
   def normalize_system(system)
     case system
     when Array
       system.map { |b| b.is_a?(Hash) ? (b[:text] || b["text"] || "").to_s : b.to_s }.join("\n\n")
     when String then system
     end
-  end
-
-  def append_schema_hint(system_text, output_config)
-    return system_text unless output_config && (klass = output_config[:format])
-
-    hint = JSON_SCHEMA_HINTS[klass.name]
-    return system_text unless hint
-
-    [system_text, hint].compact.join("\n\n")
   end
 
   def build_messages(system_text, messages)
@@ -120,7 +207,7 @@ end
 class OllamaMessageResponse
   ContentBlock = Struct.new(:text)
 
-  attr_reader :stop_reason
+  attr_reader :stop_reason, :text
 
   def initialize(text:, usage_data: {})
     @text       = text
@@ -158,8 +245,8 @@ class OllamaUsage
     @data = data
   end
 
-  def input_tokens                = @data["prompt_tokens"]     || 0
-  def output_tokens               = @data["completion_tokens"] || 0
+  def input_tokens                = @data["prompt_eval_count"] || 0
+  def output_tokens               = @data["eval_count"]        || 0
   def cache_creation_input_tokens = nil
   def cache_read_input_tokens     = nil
 end

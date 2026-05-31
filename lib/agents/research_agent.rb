@@ -50,7 +50,10 @@ class ResearchAgent
       num_results: @results_per_topic,
       type: "auto",
       category: @category,
-      summary: { query: "Summarize this article's key points for a podcast segment" },
+      summary: { query: "Extract this article's specific facts for a finance and tech podcast: " \
+                        "every figure, price, percentage, date, named person or company, and any " \
+                        "direct quote. State exactly what the article says and attribute each claim " \
+                        "to its source. Do not infer, calculate, or add anything not explicitly stated." },
       start_published_date: (Date.today - 7).iso8601
     )
 

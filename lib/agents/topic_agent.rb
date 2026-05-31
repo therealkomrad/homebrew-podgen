@@ -88,6 +88,11 @@ class TopicAgent
           - Time-aware (reference this week, recent events, or current trends)
           - Aligned with the podcast's topic areas and editorial voice
           - Different from each other, covering distinct topic areas from the guidelines
+
+          If the guidelines assign selection weights or priorities to topic areas,
+          honor them: over a run of episodes, higher-weight areas should appear more
+          often than lower-weight ones. Still lead with any genuinely major recent
+          development, and avoid the recently-covered topics listed below.
         PROMPT
       },
       {

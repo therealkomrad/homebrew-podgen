@@ -380,8 +380,8 @@ class ScriptReviewer
          opinionated friend explaining the news. Flag segments that are too formal,
          too breathless, or contain filler phrases.
 
-      5. NUMBER FORMAT: Numbers should use digits ($67,500, 10 GW, 22%), not words
-         (sixty-seven thousand five hundred). Flag spelled-out numbers.
+      5. NUMBER FORMAT: Numbers should use digits (88%, 10x, 1.4 billion), not words
+         (eighty-eight percent). Flag spelled-out numbers.
 
       6. NATURAL FLOW: Would this sound natural read aloud by text-to-speech?
          Flag awkward phrasing, overly long sentences (>40 words), or abrupt transitions.

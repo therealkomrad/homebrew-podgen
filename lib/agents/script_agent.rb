@@ -322,7 +322,8 @@ class ScriptAgent
       segment per topic area (lead with the specific numbers, then the analysis — what it means,
       who wins or loses, the catch — then a short "what to watch"), then a brief closing-thought
       segment with one sharp, specific prediction (no recap, no "stay tuned"). TOTAL spoken text
-      across all segments: 1,500-1,700 words. Do not exceed 1,800 words.
+      scales with the number of topic segments — roughly 1,900-2,200 words for a five-segment
+      episode (about 300 words per topic segment plus the open and close). Do not exceed 2,400 words.
 
       GROUND EVERY CLAIM IN THE RESEARCH: use only facts, numbers, names, dates, and quotes
       explicitly present in the findings. Do NOT infer, calculate, estimate, or invent details

@@ -185,6 +185,87 @@ class TestPublishCommand < Minitest::Test
 
   # find_text_file moved to EpisodeScanner — see test_episode_scanner.rb.
 
+  # --- --all flag (R2 + LingQ + YouTube in one invocation) ---
+
+  def test_all_dispatches_to_all_three_publishers
+    invocations = run_with_all_stubs(@episodes_dir, options: { all: true })
+    assert_equal [:r2, :lingq, :youtube], invocations.map { |i| i[:target] }
+  end
+
+  def test_all_threads_options_and_episode_id_to_each_target
+    invocations = run_with_all_stubs(
+      @episodes_dir,
+      options: { all: true, force: true, dry_run: true },
+      episode_id: "2026-05-15"
+    )
+    invocations.each do |i|
+      assert_equal "2026-05-15", i[:kwargs][:episode_id], "#{i[:target]} missing episode_id"
+      assert_equal true, i[:kwargs][:options][:force],    "#{i[:target]} missing force"
+      assert_equal true, i[:kwargs][:options][:dry_run],  "#{i[:target]} missing dry_run"
+    end
+  end
+
+  def test_all_skips_lingq_when_not_configured
+    results = {
+      r2:      mk_result(errors: []),
+      lingq:   mk_result(errors: [{ type: :not_configured, message: "lingq off" }]),
+      youtube: mk_result(errors: [])
+    }
+    invocations, out, _ = capture_all_run(@episodes_dir, options: { all: true }, results: results)
+    assert_equal 3, invocations.length, "lingq stub still invoked even when unconfigured (skip is post-call)"
+    assert_match(/LingQ: skipped/, out)
+  end
+
+  def test_all_skips_youtube_when_not_configured
+    results = {
+      r2:      mk_result(errors: []),
+      lingq:   mk_result(errors: []),
+      youtube: mk_result(errors: [{ type: :not_configured, message: "yt off" }])
+    }
+    _, out, _ = capture_all_run(@episodes_dir, options: { all: true }, results: results)
+    assert_match(/YouTube: skipped/, out)
+  end
+
+  def test_all_returns_zero_when_every_target_succeeds_or_is_skipped
+    results = {
+      r2:      mk_result(errors: []),
+      lingq:   mk_result(errors: [{ type: :not_configured, message: "lingq off" }]),
+      youtube: mk_result(errors: [])
+    }
+    _, _, code = capture_all_run(@episodes_dir, options: { all: true }, results: results)
+    assert_equal 0, code
+  end
+
+  def test_all_returns_worst_exit_code_among_real_failures
+    # R2 succeeds, LingQ fails with rclone_failed-equivalent (exit 1),
+    # YouTube fails with playlist_verification (exit 1). Worst = 1.
+    results = {
+      r2:      mk_result(errors: []),
+      lingq:   mk_result(errors: [{ type: :upload_failed, message: "boom" }]),  # → exit 0 from publish_to_lingq (it only maps :not_configured/:no_language)
+      youtube: mk_result(errors: [{ type: :playlist_verification, message: "playlist not found" }])
+    }
+    _, _, code = capture_all_run(@episodes_dir, options: { all: true }, results: results)
+    assert_equal 1, code
+  end
+
+  def test_all_continues_after_target_failure
+    # R2 hard-fails (exit 2 — rclone missing). LingQ and YouTube must still run.
+    results = {
+      r2:      mk_result(errors: [{ type: :rclone_missing, message: "no rclone" }]),
+      lingq:   mk_result(errors: []),
+      youtube: mk_result(errors: [])
+    }
+    invocations, _, code = capture_all_run(@episodes_dir, options: { all: true }, results: results)
+    assert_equal 3, invocations.length, "later targets must still run after R2 failure"
+    assert_equal 2, code, "worst exit (R2 rclone_missing = 2) propagates"
+  end
+
+  def test_all_default_dispatch_unchanged_when_flag_absent
+    # No flags → R2 only (matches pre-existing behavior).
+    invocations = run_with_all_stubs(@episodes_dir, options: {})
+    assert_equal [:r2], invocations.map { |i| i[:target] }
+  end
+
   private
 
   StubPublishConfig = Struct.new(:episodes_dir, :name, :transcription_language,
@@ -229,5 +310,66 @@ class TestPublishCommand < Minitest::Test
     cmd.instance_variable_set(:@options, {})
     cmd.instance_variable_set(:@episode_id, episode_id)
     cmd
+  end
+
+  # Builds a fake Result struct that quacks like each publisher's own.
+  def mk_result(errors:)
+    Struct.new(:errors).new(errors)
+  end
+
+  # Stubs `.new(...).run` on each publisher class to capture its kwargs and
+  # return either the caller-provided result (per target) or a no-error one.
+  # Yields the publisher block; restores stubs on return.
+  def with_publisher_stubs(results: {})
+    invocations = []
+
+    stub_new = lambda do |target|
+      lambda do |**kwargs|
+        invocations << { target: target, kwargs: kwargs }
+        fake_publisher = Object.new
+        fake_publisher.define_singleton_method(:run) do
+          results[target] || Struct.new(:errors).new([])
+        end
+        fake_publisher
+      end
+    end
+
+    R2Publisher.stub(:new, stub_new.call(:r2)) do
+      LingQPublisher.stub(:new, stub_new.call(:lingq)) do
+        YouTubePublisher.stub(:new, stub_new.call(:youtube)) do
+          yield invocations
+        end
+      end
+    end
+  end
+
+  # Drives PublishCommand.run by setting up the command directly (skipping
+  # require_podcast! / load_config! / RegenCache by stubbing them) and
+  # routing through the publish dispatch with the given options.
+  def run_with_all_stubs(episodes_dir, options:, episode_id: nil)
+    invocations = nil
+    with_publisher_stubs do |inv|
+      invocations = inv
+      cmd = build_command(youtube_config: { privacy: "unlisted", category: "27", tags: [] })
+      cmd.instance_variable_set(:@options, options)
+      cmd.instance_variable_set(:@episode_id, episode_id)
+      capture_io { cmd.send(:dispatch_publish) }
+    end
+    invocations
+  end
+
+  # Like run_with_all_stubs but returns [invocations, stdout, exit_code].
+  def capture_all_run(episodes_dir, options:, results:, episode_id: nil)
+    invocations = nil
+    code = nil
+    out = nil
+    with_publisher_stubs(results: results) do |inv|
+      invocations = inv
+      cmd = build_command(youtube_config: { privacy: "unlisted", category: "27", tags: [] })
+      cmd.instance_variable_set(:@options, options)
+      cmd.instance_variable_set(:@episode_id, episode_id)
+      out, _ = capture_io { code = cmd.send(:dispatch_publish) }
+    end
+    [invocations, out, code]
   end
 end

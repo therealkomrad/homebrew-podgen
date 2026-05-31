@@ -245,6 +245,12 @@ podgen publish lahko_noc --lingq
 # Preview what would be uploaded to LingQ
 podgen publish lahko_noc --lingq --dry-run
 
+# Publish to every configured target (R2 + LingQ + YouTube) in one shot.
+# Unconfigured targets are skipped silently with a one-line note; failures
+# in one target don't halt the others. Exit code is the worst per-target code.
+podgen publish lahko_noc --all
+podgen publish lahko_noc 2026-05-30 --all --force        # specific episode, force re-upload everywhere
+
 # Run a component test
 podgen test hn
 ```

@@ -19,6 +19,11 @@ class R2Publisher
   INCLUDE_GLOBS = [
     "episodes/*.mp3",
     "episodes/*.html",
+    # Persist the transcript/script markdown too. The feed generator reads these
+    # .md files to build each item's title and content:encoded transcript; if they
+    # aren't synced to R2, every prior episode loses its .md on the next run's pull
+    # and collapses to a stub (generic title, no transcript). See RssGenerator.
+    "episodes/*.md",
     "feed.xml",
     "feed-*.xml",
     "site/*.html",

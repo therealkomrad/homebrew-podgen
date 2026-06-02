@@ -271,9 +271,11 @@ class ScriptAgent
         In 5-7 punchy sentences, rattle off the single biggest concrete development from EACH
         segment listed by the user — always name the model, method, dataset, paper, company, or
         asset and the hard number (e.g. "A new open model tops the reasoning benchmark at 88%,
-        but the real story is the 10x drop in inference cost"). Open with the exact cold-open
-        line specified in the guidelines (if none is given, a short "here's what's worth knowing"
-        rundown line), and end with a short call to action like "Let's get into it." Spoken word
+        but the real story is the 10x drop in inference cost"). For the opening line, follow the
+        guidelines: use a given line verbatim only if they specify an exact one, otherwise vary the
+        opener naturally each day in the show's voice (if the guidelines say nothing, a short "here's
+        what's worth knowing" rundown line). End with a short call to action like "Let's get into it."
+        Spoken word
         only, numeric digits, no markdown.
 
         FORMAT: First output one line "TITLE: <a specific, headline-style episode title naming the
@@ -316,8 +318,9 @@ class ScriptAgent
       Use numeric digits for numbers, percentages, and quantities (88%, 10x, 1.4 billion
       parameters, 3.2 seconds). TTS handles digits correctly — do NOT spell them out as words.
 
-      STRUCTURE: Open with a short "rundown" cold-open segment (use the exact opening line from
-      the guidelines — name each story's single biggest number, then a short call to action like
+      STRUCTURE: Open with a short "rundown" cold-open segment (follow the guidelines for the opening
+      line — verbatim if they give an exact one, otherwise a varied opener in the show's voice —
+      name each story's single biggest number, then a short call to action like
       "Let's get into it."), then ONE deep ~300-word analytical
       segment per topic area (lead with the specific numbers, then the analysis — what it means,
       who wins or loses, the catch — then a short "what to watch"), then a brief closing-thought

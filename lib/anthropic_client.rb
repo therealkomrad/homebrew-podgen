@@ -18,10 +18,13 @@ class StructuredOutputError < StandardError; end
 module AnthropicClient
   private
 
-  # ollama_model_env: optional env var name for a per-agent Ollama model override
-  # (e.g. "OLLAMA_SCRIPT_MODEL"). Falls back to OLLAMA_MODEL when unset/empty, so a
-  # heavier model can be used for script writing while topics/review stay lightweight.
-  def init_anthropic_client(env_key: "CLAUDE_MODEL", default_model: "claude-opus-4-7", ollama_model_env: nil)
+  # ollama_model_env / openai_model_env: optional env var names for a per-agent model
+  # override on the Ollama / OpenAI-compatible (e.g. Gemini) engines respectively
+  # (e.g. "OLLAMA_SCRIPT_MODEL", "LLM_REVIEW_MODEL"). Each falls back to the engine's
+  # default model when unset/empty — so a lightweight model can review while the main
+  # model writes, which also spreads load across separate per-model rate-limit quotas
+  # (Gemini's free tier is metered per-project-per-model).
+  def init_anthropic_client(env_key: "CLAUDE_MODEL", default_model: "claude-opus-4-7", ollama_model_env: nil, openai_model_env: nil)
     if ENV["LLM_ENGINE"] == "ollama"
       require_relative "ollama_client"
       @client = OllamaClientWrapper.new(
@@ -38,7 +41,9 @@ module AnthropicClient
         base_url: ENV.fetch("OPENAI_COMPAT_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"),
         api_key:  ENV.fetch("OPENAI_COMPAT_API_KEY") { ENV.fetch("OPENAI_API_KEY", "") }
       )
-      @model = ENV.fetch("LLM_MODEL", "gemini-2.5-flash")
+      override = openai_model_env && ENV[openai_model_env]
+      override = nil if override == ""
+      @model = override || ENV.fetch("LLM_MODEL", "gemini-2.5-flash")
     else
       @client = Anthropic::Client.new
       @model = ENV.fetch(env_key, default_model)

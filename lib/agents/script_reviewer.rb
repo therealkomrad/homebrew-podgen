@@ -78,7 +78,7 @@ class ScriptReviewer
     @priority_urls = Array(priority_urls)
     @guidelines = guidelines
     @logger = logger
-    init_anthropic_client(env_key: "CLAUDE_REVIEWER_MODEL", ollama_model_env: "OLLAMA_REVIEW_MODEL")
+    init_anthropic_client(env_key: "CLAUDE_REVIEWER_MODEL", ollama_model_env: "OLLAMA_REVIEW_MODEL", openai_model_env: "LLM_REVIEW_MODEL")
   end
 
   # Main entry point.
